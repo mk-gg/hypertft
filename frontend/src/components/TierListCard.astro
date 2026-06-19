@@ -1,0 +1,125 @@
+---
+import { cn, avgToTier, tierColor, tftIconUrl, costBorderClass } from '@/lib/utils'
+import { getMeta, getTopComps, getUnitsMap } from '@/lib/api'
+import { Image } from 'astro:assets'
+
+
+interface Props {
+  preview?: boolean
+  limit?: number
+  class?: string
+  patch?: string
+}
+
+const { preview = false, limit = 60, class: className, patch: patchProp } = Astro.props
+
+// Fetch data
+const meta = await getMeta()
+const patch = patchProp ?? meta.patch
+const [{ comps }, unitsMap] = await Promise.all([
+  getTopComps(patch, 150),
+  getUnitsMap(),
+])
+
+const displayData = comps.slice(0, limit).map((comp) => {
+  const tier = avgToTier(comp.exact_avg)
+  return {
+    tier,
+    tierCol: tierColor(tier),
+    avg: comp.exact_avg.toFixed(2),
+    n: comp.exact_n,
+    superN: comp.super_n,
+    units: comp.units.map((name) => {
+      const unit = unitsMap.get(name.toLowerCase())
+      return {
+        name,
+        icon: unit?.icon ? tftIconUrl(unit.icon) : null,
+        cost: unit?.cost ?? 1,
+      }
+    }),
+  }
+})
+---
+
+<div class={cn('w-full', className)}>
+  <div class="px-2">
+    <table class="w-full text-xs">
+      <thead class="border-b border-border text-muted-foreground uppercase text-[10px] tracking-widest">
+        <tr>
+          <th class="pb-1 pl-2 text-left font-medium">Comp</th>
+          <th class="pb-1 px-4 text-left font-medium">Tier</th>
+          <th class="pb-1 pr-2 text-center font-medium">Avg Place</th>
+          {!preview && <th class="pb-1 pr-2 text-right font-medium">Sample</th>}
+        </tr>
+      </thead>
+
+      <tbody class="divide-y divide-border/50">
+        {displayData.map((comp, index) => {
+          const isLastItemInPreview = preview && index === displayData.length - 1
+          return (
+            <tr
+              class={cn(
+                'group transition-colors',
+                isLastItemInPreview
+                  ? 'pointer-events-none select-none opacity-35'
+                  : 'hover:bg-muted/50',
+              )}
+            >
+              <!-- Unit icons -->
+              <td class="py-2 pl-2">
+                <div class="flex flex-wrap items-center gap-1">
+                  {comp.units.map((unit) => (
+                    <div class="relative shrink-0">
+                      {unit.icon ? (
+                        <Image
+                          src={unit.icon}
+                          alt={unit.name}
+                          width={40}
+                          height={40}
+                          title={unit.name}
+                          class={cn(
+                            'h-8 w-8 rounded border sm:h-10 sm:w-10',
+                            costBorderClass(unit.cost),
+                          )}
+                        />
+                      ) : (
+                        <div
+                          class="flex h-8 w-8 items-center justify-center rounded border border-border bg-muted text-[8px] sm:h-10 sm:w-10"
+                          title={unit.name}
+                        >
+                          {unit.name.slice(0, 2)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </td>
+
+              <!-- Tier -->
+              <td class="py-2 px-4 text-left">
+                <span
+                  class="font-black whitespace-nowrap"
+                  style={`color: ${comp.tierCol}`}
+                >
+                  {comp.tier}
+                </span>
+              </td>
+
+              <!-- Avg place -->
+              <td class="py-2 pr-2 text-center">
+                <span class="font-medium">{comp.avg}</span>
+              </td>
+
+              <!-- Sample size -->
+              {!preview && (
+                <td class="py-2 pr-2 text-right text-muted-foreground/60">
+                  {comp.n}n
+                </td>
+              )}
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -1,0 +1,19 @@
+# Secrets — never bake into the image (set as Cloud Run env vars/secrets instead)
+.env
+.env.*
+
+# Virtualenv / Python caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# VCS / docs / local data
+.git/
+.gitignore
+README.md
+*.md

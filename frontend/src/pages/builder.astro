@@ -1,0 +1,45 @@
+---
+import Layout from '@/layouts/Layout.astro'
+import PageHead from '@/components/PageHead.astro'
+import TopBar from '@/components/TopBar.astro'
+import { Board } from '@/components/ui/board'
+import BottomPanel from '@/components/BottomPanel.astro'
+import { RecommendedPanelTabs } from '@/components/ui/recommended-panel-tabs'
+---
+<Layout class="max-w-3xl">
+    <PageHead slot="head" title="Builder" />
+    <section>
+        <div class="flex flex-col overflow-hidden">
+            <div class="flex flex-col">
+
+
+                <TopBar />
+
+                <!-- Main content area -->
+                <div class="flex flex-col lg:flex-row flex-1 gap-2 p-2 lg:overflow-hidden min-h-0">
+
+                    <!-- Center: Hex board -->
+                    <div class="flex-1 border rounded-lg  overflow-hidden min-w-0">
+                        <Board client:load/>
+                    </div>
+
+                    <div class="w-full lg:w-80 flex-shrink-0 border rounded-lg overflow-y-auto bg-card/30 max-h-[500px] lg:max-h-none">
+                        <RecommendedPanelTabs client:load />
+                    </div>
+
+                </div>
+
+                <!-- Bottom: Champion pool -->
+                <div class="p-2 pt-0">
+                  <BottomPanel>
+                    <div slot="overview"></div>
+                    <div slot="analytics"></div>
+                  </BottomPanel>
+                </div>
+
+            </div>
+        </div>
+  </section>
+
+
+</Layout>

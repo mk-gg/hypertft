@@ -1,0 +1,62 @@
+---
+import { getMeta } from '@/lib/api'
+
+import Link from '@/components/Link.astro'
+import PageHead from '@/components/PageHead.astro'
+import { buttonVariants } from '@/components/ui/button'
+import Layout from '@/layouts/Layout.astro'
+import { cn } from '@/lib/utils'
+import TierListCard from '@/components/TierListCard.astro'
+
+const meta = await getMeta()
+const latestPatch = meta.patch
+---
+
+<Layout class="max-w-3xl">
+	<PageHead slot="head" title="Home"/>
+	<!-- Hero -->
+	<section>
+		<div class="flex flex-col space-y-1.5 p-6">
+			<p class="text-[11px] font-bold uppercase tracking-[.14em]">
+			Up to date for <span>{latestPatch}</span>
+			</p>
+			<h3 class="text-[clamp(2.6rem,5.5vw,4.2rem)] font-bold tracking-tight leading-[1.08]">
+			Get the latest<br />
+			<span>TFT comp.</span>
+			</h3>
+		</div>
+		<div class="p-6 pt-0">
+			<p class="text-[17px] max-w-[480px] leading-relaxed mb-10">
+			Uncover the latest meta trends with tier lists and comp for every patch.
+			</p>
+			<div class="flex gap-3 flex-wrap">
+				<Link href="/builder/"
+				   class={cn(
+						buttonVariants({ variant: 'outline', size: 'lg' }),
+						"px-6 py-2.5 rounded-xl border-[var(--border-2)]  text-[13px]"
+					)}
+				>
+				Open builder
+				</Link>
+				<Link href="/tierlist/"
+				   class={cn(
+						buttonVariants({ variant: 'outline', size: 'lg' }),
+						"px-6 py-2.5 rounded-xl border-[var(--border-2)]  text-[13px]"
+					)}
+				>
+				View tier list
+				</Link>
+			</div>
+		</div>
+	</section>
+	<!-- Tier List Preview -->
+	<section class="border border-[#232635]/45 rounded-lg overflow-hidden relative shadow-lg w-full">
+	  <Link href="/tierlist/" 
+	  	class="w-full flex items-center justify-center py-4 px-6 font-semibold text-base gap-1 transition group">
+		Set 17 Tierlist
+		<span class="transition-transform group-hover:translate-x-1">&#129106;</span>
+	  </Link>
+	  <TierListCard preview={true} limit={4} />
+	  <div class="absolute bottom-0 left-0 right-0 h-[4px] bg-gradient-to-r from-[#a855f7] via-[#c084fc] to-[#a855f7]"></div>
+	</section>
+</Layout>

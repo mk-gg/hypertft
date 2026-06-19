@@ -1,0 +1,77 @@
+---
+import Link from '@/components/Link.astro'
+import { cn } from '@/lib/utils'
+
+interface Props {
+  patches: string[]
+  activePatch: string
+  latest: string
+}
+
+const { patches, activePatch, latest } = Astro.props
+---
+
+<div
+  class="bg-background/95 border-border/50 sticky top-12 z-40 w-full border-b backdrop-blur-sm transition-all lg:hidden"
+>
+  <div class="mx-auto flex max-w-3xl items-center px-4 py-2">
+    <div 
+      id="patch-header-scroll"
+      class="flex items-center gap-x-2 overflow-x-auto no-scrollbar py-1 scroll-smooth"
+    >
+      <span class="text-muted-foreground shrink-0 text-[10px] font-bold uppercase tracking-widest mr-2">
+        Patches:
+      </span>
+      {
+        patches.map((patch) => {
+          const isActive = patch === activePatch
+          const href = patch === latest ? '/tierlist' : `/tierlist/${patch}`
+
+          return (
+            <Link
+              href={href}
+              data-active={isActive}
+              class={cn(
+                'shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+              )}
+            >
+              {patch}
+            </Link>
+          )
+        })
+      }
+    </div>
+  </div>
+</div>
+
+<style>
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+</style>
+
+<script>
+  function scrollActiveIntoView() {
+    const container = document.getElementById('patch-header-scroll');
+    if (!container) return;
+
+    const activeItem = container.querySelector('[data-active="true"]') as HTMLElement;
+    if (activeItem) {
+      const scrollOptions: ScrollIntoViewOptions = { 
+        behavior: 'auto', 
+        block: 'nearest', 
+        inline: 'center' 
+      };
+      activeItem.scrollIntoView(scrollOptions);
+    }
+  }
+
+  document.addEventListener('astro:page-load', scrollActiveIntoView);
+</script>
