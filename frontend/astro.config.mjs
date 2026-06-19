@@ -1,5 +1,5 @@
 // @ts-check
-import { defineConfig } from 'astro/config'
+import { defineConfig, passthroughImageService } from 'astro/config'
 
 import react from '@astrojs/react'
 import icon from "astro-icon";
@@ -18,6 +18,10 @@ export default defineConfig({
         enabled: false
     },
     image: {
+        // Serve remote game icons directly (no /_image endpoint, no sharp).
+        // The host (Cloudflare) can't run Astro's optimizer, and these
+        // community-dragon icons are already small — so skip optimization.
+        service: passthroughImageService(),
         domains: ['raw.communitydragon.org'],
     },
 });
