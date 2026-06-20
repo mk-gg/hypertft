@@ -8,7 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       platforms:
-        description: 'Regions (space-separated), e.g. "na1 euw1 kr". Blank = default.'
+        description: 'Regions (space-separated), e.g. "na1 euw1 kr". Blank = default set.'
+        required: false
+        default: ''
+      limit:
+        description: 'Max new matches per platform. Blank = TARGET_MATCHES_PER_RUN.'
         required: false
         default: ''
 
@@ -28,6 +32,9 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       REDIS_URL:    ${{ secrets.REDIS_URL }}
       RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+      # Platforms used when none are passed (scheduled runs). Keep this small —
+      # all 16 regions takes >1h. These three cover the main metas.
+      DEFAULT_PLATFORMS: 'na1 euw1 kr sg2 oc1 jp1 ph2'
     steps:
       - uses: actions/checkout@v4
 
@@ -42,11 +49,14 @@ jobs:
 
       - name: Collect new matches
         run: |
-          if [ -n "${{ inputs.platforms }}" ]; then
-            python -m collector.main --platforms ${{ inputs.platforms }}
-          else
-            python -m collector.main
+          PLATFORMS="${{ inputs.platforms }}"
+          PLATFORMS="${PLATFORMS:-$DEFAULT_PLATFORMS}"
+          LIMIT_ARG=""
+          if [ -n "${{ inputs.limit }}" ]; then
+            LIMIT_ARG="--limit ${{ inputs.limit }}"
           fi
+          echo "Collecting platforms: $PLATFORMS  $LIMIT_ARG"
+          python -m collector.main --platforms $PLATFORMS $LIMIT_ARG
 
       - name: Aggregate stats
         run: python -m aggregator.main
