@@ -34,7 +34,7 @@ jobs:
       RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
       # Platforms used when none are passed (scheduled runs). Keep this small —
       # all 16 regions takes >1h. These three cover the main metas.
-      DEFAULT_PLATFORMS: 'na1 euw1 kr sg2 oc1 jp1 ph2'
+      DEFAULT_PLATFORMS: 'na1 euw1 kr sg2 oc1 jp1'
     steps:
       - uses: actions/checkout@v4
 
