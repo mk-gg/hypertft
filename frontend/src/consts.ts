@@ -2,8 +2,8 @@ import type { IconMap, SocialLink, Site } from '@/types'
 
 export const SITE: Site = {
   title: 'HyperTFT',
-  description: 'Find meta TFT comps',
-  href: 'https://mkgg.dev',
+  description: 'Find trending TFT comps',
+  href: 'https://hypertft.pages.dev',
   author: 'mk-gg',
   locale: 'en-US',
 }

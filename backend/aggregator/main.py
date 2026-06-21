@@ -70,6 +70,41 @@ def _warn_unknown_items(participants: list[dict], patch_data: dict | None) -> No
         )
 
 
+def _warn_unknown_units(participants: list[dict], patch_data: dict | None) -> None:
+    """Log unit ids that appear on boards but are missing from the roster.
+
+    Set mechanics can put non-draftable units on a player's board (e.g. Set 17
+    spawns Bia & Bayin, Apex Primordian, the Cosmic Elder Dragon). If the
+    roster filter dropped one, this surfaces it — with usage counts — so it can
+    be added to the playable-specials allow-list instead of showing as a broken
+    icon in comps.
+    """
+    from aggregator.compute import norm_unit
+
+    roster = {
+        norm_unit(u.get("id") or "")
+        for u in (patch_data or {}).get("units", [])
+    }
+    if not roster:
+        return
+
+    from collections import Counter
+    seen: Counter[str] = Counter()
+    for p in participants:
+        for unit in p.get("units", []):  # already normalised by extract_participants
+            seen[unit] += 1
+
+    unknown = {u: n for u, n in seen.items() if u not in roster}
+    if unknown:
+        top = sorted(unknown.items(), key=lambda kv: kv[1], reverse=True)
+        logger.warning(
+            "%d unit id(s) on boards missing from roster — add obtainable ones "
+            "to the playable-specials list (top by usage): %s",
+            len(unknown),
+            ", ".join(f"{u} ({n})" for u, n in top[:15]),
+        )
+
+
 def main() -> None:
     config = AggregatorConfig()
 
@@ -98,9 +133,10 @@ def main() -> None:
         "%d participants from %d matches.", len(participants), len(raw_matches)
     )
 
-    # Surface any items that appear on units but are missing from the roster,
-    # so a missing icon shows up as a pipeline warning instead of a silent gap.
+    # Surface any items/units that appear in matches but are missing from the
+    # roster, so a missing icon shows up as a pipeline warning, not a silent gap.
     _warn_unknown_items(participants, patch_data)
+    _warn_unknown_units(participants, patch_data)
 
     # ── Group participants by TFT patch ───────────────────────────────────
     from collections import defaultdict

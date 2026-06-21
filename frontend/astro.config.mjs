@@ -9,7 +9,7 @@ import tailwindcss from "@tailwindcss/vite"
 
 // https://astro.build/config
 export default defineConfig({
-    site: 'https://mkgg.dev',
+    site: 'https://hypertft.pages.dev',
     integrations: [react(), icon()],
     vite: {
         plugins: [tailwindcss()],

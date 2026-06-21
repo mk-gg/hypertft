@@ -106,6 +106,18 @@ class CDragonClient:
             return False
 
         lower = api_name.lower()
+        # Units that are normally non-playable but CAN reach a player board via
+        # Set 17 mechanics — keep them so comps/items resolve their icons and
+        # they're selectable. They have no traits, so the frontend still sorts
+        # them after real champions.
+        playable_specials = {
+            "tft17_summon",           # Bia & Bayin — spawned at Shepherd (3+)
+            "tft17_enemy_aatrox",     # Apex Primordian — specific augment + lvl 9
+            "tft17_pve_elderdragon",  # Cosmic Elder Dragon — via Bard's ability
+        }
+        if lower in playable_specials:
+            return True
+
         non_playable_substrings = (
             "_enemy_", "_npc_", #"_summon_",
             "_monster_", "_item_", "_minion_",
@@ -113,8 +125,20 @@ class CDragonClient:
         if any(s in lower for s in non_playable_substrings):
             return False
 
-        # 0-cost units are tokens or summons, not playable
-        if (champion.get("cost") or 0) < 1:
+        # Specific board props CDragon lists as champions but aren't selectable.
+        non_playable_ids = {
+            "tft9_slime_crab",  # Rift Scuttler
+        }
+        if lower in non_playable_ids:
+            return False
+
+        # Real champions are cost 1–5. Everything else in the champions list
+        # (0-cost tokens; cost 8 anvils/tomes; cost 11 chests, PvE & lobby
+        # props like the Mercenary Chest and Timebreaker) is not playable.
+        # Note: Golem / Training Dummy / Mini Black Hole are cost 1, so they
+        # remain in the roster (the frontend sorts them after real champions).
+        cost = champion.get("cost") or 0
+        if cost < 1 or cost > 5:
             return False
 
         # Encounter/boss units have no traits
