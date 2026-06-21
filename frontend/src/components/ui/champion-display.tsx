@@ -27,7 +27,14 @@ export function ChampionDisplay({ units, className }: ChampionDisplayProps) {
         const matchesCost = selectedCost === null || unit.cost === selectedCost;
         return matchesName && matchesCost;
       })
-      .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        // Special non-champion units (Golem, Training Dummy, Mini Black Hole)
+        // have no traits — sort them after all real champions.
+        const aSpecial = a.traits.length === 0;
+        const bSpecial = b.traits.length === 0;
+        if (aSpecial !== bSpecial) return aSpecial ? 1 : -1;
+        return a.cost - b.cost || a.name.localeCompare(b.name);
+      });
   }, [units, search, selectedCost]);
 
   const handleUnitClick = (unit: TFTUnit) => {
