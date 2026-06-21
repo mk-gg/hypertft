@@ -10,6 +10,8 @@ import logging
 from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
+from shared.constants import RANKED_QUEUE_ID
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,16 +29,24 @@ class AggregatorStorage:
         A server-side (named) cursor is used so the full table is not buffered
         in client memory at once. JSONB columns are decoded to Python dicts by
         psycopg automatically, so no manual JSON parsing is required.
+
+        Only Ranked games are returned. Older rows collected before queue
+        filtering may include non-ranked modes, so the queue is filtered here
+        as a safety net regardless of what is physically stored.
         """
         raw_matches: list[dict] = []
         with self._pool.connection() as conn:
             with conn.cursor(name="matches_scan") as cur:
                 cur.itersize = 1000
-                cur.execute("SELECT data FROM matches")
+                cur.execute(
+                    "SELECT data FROM matches "
+                    "WHERE (data->'info'->>'queue_id')::int = %s",
+                    (RANKED_QUEUE_ID,),
+                )
                 for (data,) in cur:
                     raw_matches.append(data)
 
-        logger.info("Loaded %d raw matches from PostgreSQL.", len(raw_matches))
+        logger.info("Loaded %d ranked matches from PostgreSQL.", len(raw_matches))
         return raw_matches
 
     def read_patch_data(self) -> dict | None:

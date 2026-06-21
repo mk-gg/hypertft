@@ -10,6 +10,7 @@ import logging
 from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
+from shared.constants import is_ranked
 from shared.patch_map import resolve_tft_patch
 
 logger = logging.getLogger(__name__)
@@ -55,8 +56,11 @@ class CollectorStorage:
         for later filtering. Existing matches are left untouched.
 
         Returns:
-            ``True`` if a new row was inserted, ``False`` if it already existed.
+            ``True`` if a new row was inserted, ``False`` if it already existed
+            or the match is not a Ranked game.
         """
+        if not is_ranked(match_data):
+            return False
         with self._pool.connection() as conn:
             cur = conn.execute(
                 """
@@ -79,10 +83,15 @@ class CollectorStorage:
         if not matches:
             return 0
 
+        # Only Ranked games — the Riot endpoint can't filter by queue, so drop
+        # Normal / Hyper Roll / Double Up matches here before they ever land.
         params = [
             (match_id, region, _resolve_patch(match_data), Json(match_data))
             for match_id, match_data in matches.items()
+            if is_ranked(match_data)
         ]
+        if not params:
+            return 0
         with self._pool.connection() as conn:
             cur = conn.cursor()
             cur.executemany(

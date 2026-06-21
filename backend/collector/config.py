@@ -21,9 +21,7 @@ PLATFORM_TO_REGIONAL: dict[str, str] = {
     "kr":   "asia",
     "jp1":  "asia",
     "oc1":  "sea",
-    "ph2":  "sea",
     "sg2":  "sea",
-    "th2":  "sea",
     "tw2":  "sea",
     "vn2":  "sea",
 }
@@ -97,7 +95,10 @@ TIER_GROUPS: list[dict] = [
     },
 ]
 
-RANKED_QUEUE_ID: int = 1100
+# Single source of truth lives in shared/constants.py; re-exported here so the
+# collector's existing imports keep working.
+from shared.constants import RANKED_QUEUE_ID  # noqa: E402,F401
+
 CDRAGON_URL: str = "https://raw.communitydragon.org/latest/cdragon/tft/en_us.json"
 
 
