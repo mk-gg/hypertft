@@ -76,7 +76,12 @@ class AggregatorStorage:
     # ── Write ──────────────────────────────────────────────────────────────────
 
     def write_comp_stats(self, patch: str, comps: list[dict]) -> int:
-        """Upsert aggregated comp stats for a single patch.
+        """Replace aggregated comp stats for a single patch.
+
+        Deletes the patch's existing comps and inserts the freshly computed set
+        in one transaction, so comps that no longer appear (fell out of the
+        meta, or came from now-removed matches) don't linger as stale rows —
+        the row plus its ``exact_items`` / ``super_items`` are dropped together.
 
         ``units_norm`` (the lowercased unit list backing the GIN index) is
         derived from ``comp_key``, which the aggregator builds by joining the
@@ -85,9 +90,6 @@ class AggregatorStorage:
         Returns:
             The number of comps written.
         """
-        if not comps:
-            return 0
-
         params = [
             (
                 patch,
@@ -106,30 +108,22 @@ class AggregatorStorage:
             for comp in comps
         ]
 
+        # Atomic per-patch replace: clear then re-insert in one transaction.
         with self._pool.connection() as conn:
             cur = conn.cursor()
-            cur.executemany(
-                """
-                INSERT INTO comp_stats (
-                    patch, comp_key, units, units_norm,
-                    exact_avg, exact_n, super_avg, super_n,
-                    mutations, additions, exact_items, super_items
+            cur.execute("DELETE FROM comp_stats WHERE patch = %s", (patch,))
+            if params:
+                cur.executemany(
+                    """
+                    INSERT INTO comp_stats (
+                        patch, comp_key, units, units_norm,
+                        exact_avg, exact_n, super_avg, super_n,
+                        mutations, additions, exact_items, super_items
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    params,
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (patch, comp_key) DO UPDATE SET
-                    units       = EXCLUDED.units,
-                    units_norm  = EXCLUDED.units_norm,
-                    exact_avg   = EXCLUDED.exact_avg,
-                    exact_n     = EXCLUDED.exact_n,
-                    super_avg   = EXCLUDED.super_avg,
-                    super_n     = EXCLUDED.super_n,
-                    mutations   = EXCLUDED.mutations,
-                    additions   = EXCLUDED.additions,
-                    exact_items = EXCLUDED.exact_items,
-                    super_items = EXCLUDED.super_items
-                """,
-                params,
-            )
 
         logger.info("Wrote %d comp stats to PostgreSQL.", len(comps))
         return len(comps)
