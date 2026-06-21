@@ -10,6 +10,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from shared.constants import is_real_item
 from shared.patch_map import resolve_tft_patch
 
 
@@ -71,7 +72,7 @@ def extract_participants(raw_matches: list[dict]) -> list[dict]:
                     norm_name = norm_unit(cid)
                     item_names = [
                         i for i in u.get("itemNames", [])
-                        if i  # filter empty strings
+                        if is_real_item(i)  # drop empties + EmptyBag placeholder
                     ]
                     if item_names:
                         items_by_unit[norm_name] = item_names

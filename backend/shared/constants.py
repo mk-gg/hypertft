@@ -18,3 +18,14 @@ RANKED_QUEUE_ID: int = 1100
 def is_ranked(match_data: dict) -> bool:
     """Return True if a raw TFT match payload is a Ranked (standard) game."""
     return match_data.get("info", {}).get("queue_id") == RANKED_QUEUE_ID
+
+
+# Item names the Riot API reports that are not real, stat-worthy items.
+# ``TFT_Item_EmptyBag`` is the empty-slot placeholder returned for a unit
+# holding fewer than three items — it must never appear in item stats.
+NON_ITEM_IDS: frozenset[str] = frozenset({"tft_item_emptybag"})
+
+
+def is_real_item(item_name: str) -> bool:
+    """Return True if ``item_name`` is a real item (not empty/placeholder)."""
+    return bool(item_name) and item_name.lower() not in NON_ITEM_IDS
