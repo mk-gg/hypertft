@@ -204,7 +204,7 @@ def aggregate_comps(
         # exact_items: items seen on each unit in exact comp matches
         # super_items: items seen on each unit in superset matches
         MIN_ITEM_N = 2
-        TOP_ITEMS  = 4  # max items shown per unit
+        TOP_ITEMS  = 10  # max items stored per unit (API trims to its own top-N)
 
         def build_unit_items(
             bucket: dict[str, dict[str, list[int]]],

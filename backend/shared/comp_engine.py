@@ -74,7 +74,7 @@ def _build_item_recs(
     name_map:      dict[str, str],
     source_key:    str,           # "exact_items" or "super_items"
     min_n:         int = 2,
-    top_items:     int = 4,
+    top_items:     int = 8,
 ) -> list[UnitItemRec]:
     """
     Aggregate item stats across similar comps for each unit on the board.

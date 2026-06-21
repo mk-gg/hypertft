@@ -175,11 +175,13 @@ class CDragonClient:
         if not api_name or not name or not item.get("icon"):
             return False
 
-        # Drop known non-equippable categories by keyword. Note: NOT "ornn" —
-        # Ornn-named entries are real artifacts reused in the current set; their
-        # anvils/grants are excluded by "anvil"/"grant" instead.
+        # Drop known non-equippable categories by keyword. Notes:
+        #   - NOT "ornn": Ornn-named entries are real artifacts reused in the
+        #     current set; their anvils/grants are excluded by "anvil"/"grant".
+        #   - NOT "tactician": TFT_Item_Tacticians{Ring,Scepter} are real items;
+        #     the Tactician's Crown/Cape/Shield are "_assist_" and excluded.
         skip = (
-            "augment", "tactician", "consumable", "elixir", "placeholder",
+            "augment", "consumable", "elixir", "placeholder",
             "template", "debug", "_test", "tutorial", "blessing", "egg",
             "event", "anvil", "grant", "marketoffering", "_assist_",
         )

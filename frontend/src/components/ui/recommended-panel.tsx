@@ -198,9 +198,21 @@ export function RecommendedPanel({
                     <span className="text-[10px] text-[#676e85]">{Math.round(comp.similarity * 100)}% match</span>
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {comp.units.map((name, j) => {
+                    {(() => {
+                      // Count units already on the board so duplicate units in a
+                      // comp (e.g. 2× Samira) highlight per-instance: the first N
+                      // copies render as owned, any copies beyond that as missing.
+                      const ownedCount: Record<string, number> = {}
+                      for (const boardName of units) {
+                        const bk = boardName.toLowerCase()
+                        ownedCount[bk] = (ownedCount[bk] ?? 0) + 1
+                      }
+                      const seenCount: Record<string, number> = {}
+                      return comp.units.map((name, j) => {
                       const u = unitData(name)
-                      const isMissing = comp.missing.includes(name)
+                      const nk = name.toLowerCase()
+                      seenCount[nk] = (seenCount[nk] ?? 0) + 1
+                      const isMissing = seenCount[nk] > (ownedCount[nk] ?? 0)
                       return (
                         <div
                           key={j}
@@ -227,7 +239,8 @@ export function RecommendedPanel({
                           {isMissing && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#c89b3c]" />}
                         </div>
                       )
-                    })}
+                      })
+                    })()}
                   </div>
                 </div>
               )
