@@ -139,7 +139,7 @@ export type SuggestResult = {
   board: string[]
   patch: string
   threshold_used: number
-  superset_avg: number
+  superset_avg: number | null  // null when the board has no superset match (super_n === 0)
   superset_n: number
   suggested_comps: SuggestedComp[]
   additions: CompAdditionSuggest[]

@@ -132,7 +132,13 @@ export function RecommendedPanel({
     )
   }
 
-  if (!result) return null
+  if (!result) {
+    return (
+      <div className={cn('flex w-full flex-col gap-4 rounded-xl border border-dashed border-border/60 p-8 text-center', className)}>
+        <p className="text-xs text-muted-foreground italic">No suggestions for this board yet.</p>
+      </div>
+    )
+  }
 
   const isAll = !mode
 
@@ -167,7 +173,7 @@ export function RecommendedPanel({
             })}
           </div>
           <p className="text-[11px] text-[#676e85]">
-            Superset avg <span className="font-medium text-[#cdd6e4]">{result.superset_avg.toFixed(2)}</span>
+            Superset avg <span className="font-medium text-[#cdd6e4]">{result.superset_avg != null ? result.superset_avg.toFixed(2) : '—'}</span>
             <span className="mx-1 opacity-40">·</span>
             {result.superset_n} games
             <span className="mx-1 opacity-40">·</span>
@@ -321,6 +327,14 @@ export function RecommendedPanel({
             })}
           </div>
         </div>
+      )}
+
+      {/* Empty-state fallbacks so a tab never renders blank */}
+      {mode === 'additions' && result.additions.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">No unit additions suggested for this board.</p>
+      )}
+      {mode === 'mutations' && result.mutations.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">No swaps suggested for this board.</p>
       )}
     </div>
   )
