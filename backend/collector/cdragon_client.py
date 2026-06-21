@@ -110,9 +110,14 @@ class CDragonClient:
         # Set 17 mechanics — keep them so comps/items resolve their icons and
         # they're selectable. They have no traits, so the frontend still sorts
         # them after real champions.
+        #
+        # NOTE: Apex Primordian (TFT17_Enemy_Aatrox) is intentionally NOT here.
+        # norm_unit() strips the full "TFT\w+_" prefix, so it collapses to the
+        # same key ("aatrox") as the real Aatrox champion — including it
+        # overwrites Aatrox's name/icon and merges its stats. Distinguishing
+        # them would require changing norm_unit across the whole pipeline.
         playable_specials = {
             "tft17_summon",           # Bia & Bayin — spawned at Shepherd (3+)
-            "tft17_enemy_aatrox",     # Apex Primordian — specific augment + lvl 9
             "tft17_pve_elderdragon",  # Cosmic Elder Dragon — via Bard's ability
         }
         if lower in playable_specials:
