@@ -210,6 +210,13 @@ class CDragonClient:
         if api_name.startswith(f"tft{set_number}_item_"):
             return True
 
+        # Accept bespoke equippable categories that live under per-set prefixes:
+        #   *SquadItem*   → trait items (e.g. Set 17 Anima Squad items)
+        #   *AnomalyItem* → the Anomaly granted by a Space God
+        # These are real unit items but carry no default flag or composition.
+        if "squaditem" in api_name or "anomalyitem" in api_name:
+            return True
+
         return False
 
     @staticmethod
