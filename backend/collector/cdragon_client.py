@@ -68,7 +68,7 @@ class CDragonClient:
 
         units  = self._parse_units(current_set.get("champions", []))
         traits = self._parse_traits(current_set.get("traits", []))
-        items  = self._parse_items(raw.get("items", []), int(latest_key))
+        items  = self._parse_items(raw.get("items", []))
 
         logger.info(
             "Parsed set %s (patch %s): %d units, %d traits, %d items",
@@ -154,44 +154,41 @@ class CDragonClient:
         ]
 
     @staticmethod
-    def _is_equippable(item: dict, set_number: int) -> bool:
+    def _is_equippable(item: dict) -> bool:
         """
-        CDragon ships ~3600 items including augments, consumables, eggs,
-        tactician gear, event items, and internal placeholders.
-        We keep only items players can actually equip on units:
-          - Has inDefaultItemList = True, OR
-          - Has a non-empty composition list (crafted items), OR
-          - Is a base component (integer id 1–9), OR
-          - Is an Artifact item (recurring mechanic; no default flag), OR
-          - Belongs to the current set (radiants, trait emblems, set-mechanic
-            items like the PsyOps mods — these carry no default flag either).
-        And we drop anything whose apiName contains a known non-equippable
-        keyword regardless of the above flags.
+        CDragon ships ~3600 entries: augments, consumables, eggs, tactician
+        gear, champion tokens, trait effects, market offerings, and internal
+        placeholders. We keep the real, unit-equippable items.
+
+        Denylist-primary by design. We accept anything that looks like an item
+        — apiName contains ``_item_``, is a trait ``SquadItem`` / ``AnomalyItem``,
+        or carries an equippable flag / composition / component id — UNLESS its
+        apiName matches a known non-equippable keyword. Erring toward inclusion
+        matters: the current set reuses legacy-named items from older sets
+        (e.g. Ornn artifacts ``TFT4_Item_Ornn*``, Shimmerscale ``TFT7_Item_*``,
+        old radiants ``TFT5_Item_*Radiant``), and those must still resolve to an
+        icon. Harmless old-set bloat is the acceptable cost of full coverage.
         """
         api_name: str = (item.get("apiName") or "").lower()
         name: str     = (item.get("name") or "").strip()
 
-        if not api_name or not name:
+        if not api_name or not name or not item.get("icon"):
             return False
 
-        # Drop known non-equippable categories by keyword
+        # Drop known non-equippable categories by keyword. Note: NOT "ornn" —
+        # Ornn-named entries are real artifacts reused in the current set; their
+        # anvils/grants are excluded by "anvil"/"grant" instead.
         skip = (
-            "augment", "tactician", "ornn", "consumable",
-            "elixir", "placeholder", "template", "debug",
-            "_test", "tutorial", "event", "blessing", "egg",
+            "augment", "tactician", "consumable", "elixir", "placeholder",
+            "template", "debug", "_test", "tutorial", "blessing", "egg",
+            "event", "anvil", "grant", "marketoffering", "_assist_",
         )
         if any(s in api_name for s in skip):
             return False
 
-        # Accept items flagged as default list items
-        if item.get("inDefaultItemList"):
+        # Equippable signals.
+        if item.get("inDefaultItemList") or item.get("composition"):
             return True
-
-        # Accept crafted items (have a composition list)
-        if item.get("composition"):
-            return True
-
-        # Accept base components (id is integer 1–9)
         try:
             item_id = item.get("id")
             if item_id is not None and 1 <= int(item_id) <= 9:
@@ -199,36 +196,26 @@ class CDragonClient:
         except (TypeError, ValueError):
             pass
 
-        # Accept Artifact items — a recurring, cross-set mechanic whose entries
-        # (e.g. TFT_Item_Artifact_InnervatingLocket) lack the default-list flag.
-        if "_item_artifact" in api_name:
+        # Any standard / artifact / radiant / emblem / legacy item.
+        if "_item_" in api_name:
             return True
 
-        # Accept everything belonging to the current set: radiant upgrades,
-        # trait emblems, and set-mechanic items (e.g. the Set 17 PsyOps mods)
-        # are equippable but carry neither the flag nor a composition.
-        if api_name.startswith(f"tft{set_number}_item_"):
-            return True
-
-        # Accept bespoke equippable categories that live under per-set prefixes:
-        #   *SquadItem*   → trait items (e.g. Set 17 Anima Squad items)
-        #   *AnomalyItem* → the Anomaly granted by a Space God
-        # These are real unit items but carry no default flag or composition.
+        # Trait items (e.g. Anima Squad) and the Anomaly carry no "_item_".
         if "squaditem" in api_name or "anomalyitem" in api_name:
             return True
 
         return False
 
     @staticmethod
-    def _parse_items(items: list[dict], set_number: int) -> list[ItemModel]:
+    def _parse_items(items: list[dict]) -> list[ItemModel]:
         """
-        Filter down to equippable unit items only (~250–400 items vs ~3600),
-        including the current set's artifacts, radiants, and mechanic items.
-        Keeps the stored patch roster lean and relevant to comp analysis.
+        Filter CDragon's ~3600 entries down to unit-equippable items, including
+        the current set's artifacts, radiants, mechanic items, and any legacy-
+        named items the set reuses. Errs toward inclusion (see _is_equippable).
         """
         parsed = []
         for i in items:
-            if not CDragonClient._is_equippable(i, set_number):
+            if not CDragonClient._is_equippable(i):
                 continue
             api_name = i.get("apiName") or ""
             parsed.append(

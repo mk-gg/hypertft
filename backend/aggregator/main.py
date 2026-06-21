@@ -39,6 +39,37 @@ def build_name_map(patch_data: dict | None) -> dict[str, str]:
     }
 
 
+def _warn_unknown_items(participants: list[dict], patch_data: dict | None) -> None:
+    """Log item ids that appear on units but are missing from the roster.
+
+    Turns a missing-icon gap into a visible pipeline warning (with usage
+    counts) instead of an iconless item you have to spot by eye in the UI.
+    """
+    roster = {
+        (it.get("id") or "").lower()
+        for it in (patch_data or {}).get("items", [])
+    }
+    if not roster:
+        return
+
+    from collections import Counter
+    seen: Counter[str] = Counter()
+    for p in participants:
+        for items in p.get("items_by_unit", {}).values():
+            for item_id in items:
+                seen[item_id] += 1
+
+    unknown = {i: n for i, n in seen.items() if i.lower() not in roster}
+    if unknown:
+        top = sorted(unknown.items(), key=lambda kv: kv[1], reverse=True)
+        logger.warning(
+            "%d item id(s) in matches missing from roster — add to the item "
+            "filter so they get icons (top by usage): %s",
+            len(unknown),
+            ", ".join(f"{i} ({n})" for i, n in top[:15]),
+        )
+
+
 def main() -> None:
     config = AggregatorConfig()
 
@@ -66,6 +97,10 @@ def main() -> None:
     logger.info(
         "%d participants from %d matches.", len(participants), len(raw_matches)
     )
+
+    # Surface any items that appear on units but are missing from the roster,
+    # so a missing icon shows up as a pipeline warning instead of a silent gap.
+    _warn_unknown_items(participants, patch_data)
 
     # ── Group participants by TFT patch ───────────────────────────────────
     from collections import defaultdict
