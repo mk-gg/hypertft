@@ -6,6 +6,7 @@ Reads raw matches from PostgreSQL, writes aggregated stats back.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
@@ -23,31 +24,74 @@ class AggregatorStorage:
 
     # ── Read ─────────────────────────────────────────────────────────────────
 
-    def scan_all_matches(self) -> list[dict]:
-        """Stream every raw match payload from the database.
+    def get_dirty_patches(self, since: datetime | None) -> list[str]:
+        """Return the patches that received matches after ``since``.
 
-        A server-side (named) cursor is used so the full table is not buffered
-        in client memory at once. JSONB columns are decoded to Python dicts by
-        psycopg automatically, so no manual JSON parsing is required.
+        These are the only patches whose stats can have changed, so they are
+        the only ones the aggregator needs to re-process. ``since=None`` (first
+        run, or a forced full rebuild) returns every patch present.
+        """
+        with self._pool.connection() as conn:
+            if since is None:
+                rows = conn.execute(
+                    "SELECT DISTINCT tft_patch FROM matches"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT DISTINCT tft_patch FROM matches WHERE created_at > %s",
+                    (since,),
+                ).fetchall()
+        return [row[0] for row in rows]
 
-        Only Ranked games are returned. Older rows collected before queue
-        filtering may include non-ranked modes, so the queue is filtered here
-        as a safety net regardless of what is physically stored.
+    def load_ranked_matches_for_patch(self, patch: str) -> list[dict]:
+        """Stream the raw Ranked match payloads for a single patch.
+
+        A server-side (named) cursor keeps memory bounded; JSONB is decoded to
+        Python dicts automatically. The queue filter is a safety net for any
+        legacy rows collected before queue filtering existed at ingest.
         """
         raw_matches: list[dict] = []
         with self._pool.connection() as conn:
-            with conn.cursor(name="matches_scan") as cur:
+            with conn.cursor(name="patch_scan") as cur:
                 cur.itersize = 1000
                 cur.execute(
                     "SELECT data FROM matches "
-                    "WHERE (data->'info'->>'queue_id')::int = %s",
-                    (RANKED_QUEUE_ID,),
+                    "WHERE tft_patch = %s "
+                    "AND (data->'info'->>'queue_id')::int = %s",
+                    (patch, RANKED_QUEUE_ID),
                 )
                 for (data,) in cur:
                     raw_matches.append(data)
-
-        logger.info("Loaded %d ranked matches from PostgreSQL.", len(raw_matches))
         return raw_matches
+
+    def comp_patch_counts(self) -> dict[str, int]:
+        """Return ``{patch: comp_count}`` straight from ``comp_stats``.
+
+        The authoritative source for which patches have browsable stats and how
+        many comps each holds. Cheap — counts the indexed ``patch`` column
+        without touching the JSONB blobs.
+        """
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT patch, count(*) FROM comp_stats GROUP BY patch"
+            ).fetchall()
+        return {row[0]: row[1] for row in rows}
+
+    def distinct_regions(self) -> list[str]:
+        """Return the distinct collection regions present in ``matches``."""
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT region FROM matches"
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def read_meta(self, key: str) -> dict | None:
+        """Read a metadata record by key, or ``None`` if it does not exist."""
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "SELECT value FROM meta WHERE meta_key = %s", (key,)
+            ).fetchone()
+        return row[0] if row else None
 
     def read_patch_data(self) -> dict | None:
         """Read the patch roster stored by the collector under ``patch_data``.

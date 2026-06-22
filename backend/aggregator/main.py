@@ -1,13 +1,20 @@
 """
 aggregator/main.py
-Reads all raw matches from PostgreSQL, computes stats, writes back.
+Computes comp stats from raw matches and writes them back.
+
+Only patches that received new matches since the last run are re-aggregated
+(frozen patches are left untouched), which avoids needless rewrites of the
+whole table every run. Pass --full to force a rebuild of every patch (e.g.
+after changing aggregation parameters).
 
 Usage:
     python -m aggregator.main
+    python -m aggregator.main --full
 """
 
 from __future__ import annotations
 
+import argparse
 import logging
 from datetime import datetime, timezone
 
@@ -23,6 +30,30 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+# Watermark metadata key — ISO timestamp of the last successful aggregation.
+# Patches with matches newer than this are the only ones that need rework.
+_WATERMARK_KEY = "agg_watermark"
+
+
+def _patch_sort_key(patch: str) -> tuple[int, int]:
+    """Sort key turning ``'17.8'`` into ``(17, 8)`` for numeric ordering."""
+    try:
+        parts = patch.split(".")
+        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+    except (ValueError, IndexError):
+        return (0, 0)
+
+
+def _read_watermark(storage: AggregatorStorage) -> datetime | None:
+    """Return the timestamp of the last successful run, or ``None``."""
+    rec = storage.read_meta(_WATERMARK_KEY)
+    if not rec or not rec.get("ts"):
+        return None
+    try:
+        return datetime.fromisoformat(rec["ts"])
+    except ValueError:
+        return None
 
 
 def build_name_map(patch_data: dict | None) -> dict[str, str]:
@@ -105,115 +136,126 @@ def _warn_unknown_units(participants: list[dict], patch_data: dict | None) -> No
         )
 
 
-def main() -> None:
+def main(full: bool = False) -> None:
     config = AggregatorConfig()
 
     pool = create_pool(config.database_url)
     init_schema(pool)
     storage = AggregatorStorage(pool)
 
-    # Load raw matches
-    logger.info("Loading raw matches …")
-    raw_matches = storage.scan_all_matches()
-    if not raw_matches:
-        logger.error("No matches found. Run the collector first.")
+    try:
+        # Patch roster, for display-name mapping and warnings.
+        patch_data = storage.read_patch_data()
+        name_map   = build_name_map(patch_data)
+
+        # Incremental watermark — only patches with new matches need rework.
+        # Capture the start time *before* reading so matches inserted during
+        # this run are picked up next time rather than silently skipped.
+        watermark   = None if full else _read_watermark(storage)
+        run_started = datetime.now(timezone.utc)
+
+        dirty_patches = storage.get_dirty_patches(watermark)
+        if not dirty_patches:
+            logger.info(
+                "No new matches since %s — nothing to aggregate.", watermark
+            )
+            return
+
+        logger.info(
+            "%s aggregation — %d patch(es) to process: %s",
+            "Full" if full else "Incremental",
+            len(dirty_patches),
+            ", ".join(sorted(dirty_patches)),
+        )
+
+        # Per-patch counts, so the global summary can be assembled from frozen
+        # + freshly computed patches without re-scanning the whole table.
+        summaries: dict[str, dict] = storage.read_meta("patch_summaries") or {}
+
+        for tft_patch in sorted(dirty_patches):
+            matches      = storage.load_ranked_matches_for_patch(tft_patch)
+            participants = extract_participants(matches)
+            logger.info(
+                "Aggregating patch %s — %d participants from %d matches "
+                "(threshold=%.0f%%) …",
+                tft_patch, len(participants), len(matches),
+                config.super_threshold * 100,
+            )
+
+            # Surface items/units present in matches but missing from the
+            # roster, so a missing icon shows up as a warning, not a silent gap.
+            _warn_unknown_items(participants, patch_data)
+            _warn_unknown_units(participants, patch_data)
+
+            comps = aggregate_comps(
+                participants=participants,
+                name_map=name_map,
+                super_threshold=config.super_threshold,
+                min_n_comp=config.min_n_comp,
+                min_n_mutation=config.min_n_mutation,
+                min_n_addition=config.min_n_addition,
+                top_mutations=config.top_mutations,
+                top_additions=config.top_additions,
+            )
+            written = storage.write_comp_stats(patch=tft_patch, comps=comps)
+            summaries[tft_patch] = {
+                "matches":      len(matches),
+                "participants": len(participants),
+                "comps":        written,
+            }
+            logger.info("Patch %s — %d comps written.", tft_patch, written)
+
+        storage.write_meta("patch_summaries", summaries)
+
+        # ── Build summary metadata ─────────────────────────────────────────
+        # comp_stats is the source of truth for which patches are browsable;
+        # the per-patch summaries supply the match/participant totals.
+        comp_counts  = storage.comp_patch_counts()
+        available    = sorted(comp_counts, key=_patch_sort_key, reverse=True)
+        latest_patch = available[0] if available else "unknown"
+
+        storage.write_meta(
+            "stats_summary",
+            {
+                "patch":              latest_patch,
+                "set_number":         patch_data.get("set_number", 0) if patch_data else 0,
+                "total_matches":      sum(s.get("matches", 0) for s in summaries.values()),
+                "total_participants": sum(s.get("participants", 0) for s in summaries.values()),
+                "total_comps":        sum(comp_counts.values()),
+                "last_updated":       datetime.now(timezone.utc).isoformat(),
+                "regions":            storage.distinct_regions(),
+                "available_patches":  available,
+            },
+        )
+
+        # Advance the watermark only after a fully successful run.
+        storage.write_meta(_WATERMARK_KEY, {"ts": run_started.isoformat()})
+
+        logger.info(
+            "Aggregation complete — %d patch(es) updated, %d total comps. Latest: %s",
+            len(dirty_patches), sum(comp_counts.values()), latest_patch,
+        )
+
+        # New stats are live — flush the API read cache so the next request
+        # repopulates it from the freshly indexed PostgreSQL data.
+        cache = create_cache(config.redis_url)
+        cache.invalidate()
+        cache.close()
+    finally:
         pool.close()
-        return
 
-    # Load patch data for display name mapping
-    patch_data = storage.read_patch_data()
-    name_map   = build_name_map(patch_data)
-    patch      = patch_data.get("patch", "unknown") if patch_data else "unknown"
-    logger.info("Patch: %s | name_map: %d entries", patch, len(name_map))
 
-    # Extract participants
-    logger.info("Extracting participants …")
-    participants = extract_participants(raw_matches)
-    logger.info(
-        "%d participants from %d matches.", len(participants), len(raw_matches)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="HyperTFT stats aggregator")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Re-aggregate every patch, ignoring the incremental watermark "
+             "(use after changing aggregation parameters).",
     )
-
-    # Surface any items/units that appear in matches but are missing from the
-    # roster, so a missing icon shows up as a pipeline warning, not a silent gap.
-    _warn_unknown_items(participants, patch_data)
-    _warn_unknown_units(participants, patch_data)
-
-    # ── Group participants by TFT patch ───────────────────────────────────
-    from collections import defaultdict
-    by_patch: dict[str, list[dict]] = defaultdict(list)
-    for p in participants:
-        by_patch[p["tft_patch"]].append(p)
-
-    all_patches = sorted(by_patch.keys())
-    logger.info(
-        "Found %d patches: %s",
-        len(all_patches),
-        ", ".join(all_patches) if all_patches else "none",
-    )
-
-    # ── Aggregate per patch ────────────────────────────────────────────────
-    total_written = 0
-    for tft_patch, patch_participants in by_patch.items():
-        logger.info(
-            "Aggregating patch %s — %d participants (threshold=%.0f%%) …",
-            tft_patch, len(patch_participants), config.super_threshold * 100,
-        )
-        comps = aggregate_comps(
-            participants=patch_participants,
-            name_map=name_map,
-            super_threshold=config.super_threshold,
-            min_n_comp=config.min_n_comp,
-            min_n_mutation=config.min_n_mutation,
-            min_n_addition=config.min_n_addition,
-            top_mutations=config.top_mutations,
-            top_additions=config.top_additions,
-        )
-        written = storage.write_comp_stats(patch=tft_patch, comps=comps)
-        total_written += written
-        logger.info(
-            "Patch %s — %d comps written.", tft_patch, written
-        )
-
-
-
-    # ── Derive latest patch numerically (CDragon patchLine is unreliable) ───
-    def _sort_key(p: str) -> tuple[int, int]:
-        try:
-            parts = p.split(".")
-            return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
-        except (ValueError, IndexError):
-            return (0, 0)
-
-    latest_patch = sorted(all_patches, key=_sort_key, reverse=True)[0] if all_patches else "unknown"
-
-    # ── Write summary metadata ─────────────────────────────────────────────
-    storage.write_meta(
-        "stats_summary",
-        {
-            "patch":              latest_patch,
-            "set_number":         patch_data.get("set_number", 0) if patch_data else 0,
-            "total_matches":      len(raw_matches),
-            "total_participants": len(participants),
-            "total_comps":        total_written,
-            "last_updated":       datetime.now(timezone.utc).isoformat(),
-            "regions":            list({p.get("region", "unknown") for p in participants}),
-            "available_patches":  all_patches,
-        },
-    )
-
-    logger.info(
-        "Aggregation complete — %d total comps across %d patches. Latest: %s",
-        total_written, len(all_patches), latest_patch,
-    )
-
-    # New stats are live — flush the API read cache so the next request
-    # repopulates it from the freshly indexed PostgreSQL data.
-    cache = create_cache(config.redis_url)
-    cache.invalidate()
-    cache.close()
-
-    pool.close()
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(full=args.full)
