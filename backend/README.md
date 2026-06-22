@@ -188,25 +188,36 @@ Expected output:
 ### Step 2 — Aggregate stats
 
 ```bash
-python -m aggregator.main
+python -m aggregator.main          # incremental (default)
+python -m aggregator.main --full   # rebuild every patch
 ```
 
 What this does:
-- Scans all matches from PostgreSQL
-- Groups participants by `tft_patch` (e.g. `"17.8"`, `"17.7"`)
+- **Incremental by default** — only re-aggregates patches that received new
+  matches since the last run (tracked by an `agg_watermark` in `meta`). Frozen
+  patches keep their existing `comp_stats` rows untouched. In steady state this
+  means just the current patch, so runs are fast and don't churn the table.
+- Loads only the Ranked matches for each patch being processed
 - Runs Jaccard similarity, comp bucketing, mutation and addition logic per patch
-- Writes stats to the `comp_stats` table, keyed `(patch, comp_key)`
+- Writes stats to the `comp_stats` table, keyed `(patch, comp_key)` (atomic
+  per-patch replace, so dropped comps don't linger)
 - Updates the `meta` table with the patch list and summary counts
 
-Expected output:
+Use `--full` after changing aggregation parameters (`MIN_N_COMP`, thresholds,
+etc.) so every patch is recomputed with the new settings.
+
+Expected output (incremental — only the active patch changed):
 ```
-[INFO] aggregator.main — 12480 participants from 984 matches.
-[INFO] aggregator.main — Found 3 patches: 17.6, 17.7, 17.8
-[INFO] aggregator.main — Aggregating patch 17.8 — 9200 participants …
-[INFO] aggregator.main — Patch 17.8 — 312 comps written.
-[INFO] aggregator.main — Aggregating patch 17.7 — 2100 participants …
-[INFO] aggregator.main — Patch 17.7 — 198 comps written.
+[INFO] __main__ — Incremental aggregation — 1 patch(es) to process: 17.8
+[INFO] __main__ — Aggregating patch 17.8 — 9200 participants from 1150 matches …
+[INFO] __main__ — Patch 17.8 — 312 comps written.
+[INFO] __main__ — Aggregation complete — 1 patch(es) updated, 510 total comps. Latest: 17.8
 ```
+
+> **Maintenance note.** The per-patch replace writes new row versions each run;
+> Postgres' autovacuum reclaims dead space for reuse but doesn't shrink the
+> file. If `comp_stats` ever bloats well beyond its live size, run a one-time
+> `VACUUM (FULL, ANALYZE) comp_stats` to return the space to disk.
 
 ### Step 3 — Run the API
 
