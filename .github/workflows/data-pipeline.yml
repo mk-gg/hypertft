@@ -33,8 +33,8 @@ jobs:
       REDIS_URL:    ${{ secrets.REDIS_URL }}
       RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
       # Platforms used when none are passed (scheduled runs). Keep this small —
-      # all 16 regions takes >1h. These three cover the main metas.
-      DEFAULT_PLATFORMS: 'na1 euw1 kr sg2 vn2 tw2'
+      # all 16 regions takes >3h. These three cover the main metas.
+      DEFAULT_PLATFORMS: 'na1 euw1 kr sg2'
     steps:
       - uses: actions/checkout@v4
 
