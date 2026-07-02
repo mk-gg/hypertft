@@ -1,18 +1,17 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import React from "react"
-import { ChampionDisplay } from '@/components/ui/champion-display'
-import { ItemsPanel } from '@/components/ui/items-panel'
+import { ChampionDisplay } from '@/components/builder/champion-display'
+import { ItemsPanel } from '@/components/builder/items-panel'
 import type { TFTUnit } from "@/types"
 
 interface BottomTabsProps {
   defaultValue?: string
-  overview?: React.ReactNode
-  analytics?: React.ReactNode
   className?: string
   champions?: TFTUnit[]
 }
 
-export function BottomTabs({ defaultValue, overview, analytics, className, champions }: BottomTabsProps) {
+/** Bottom panel tabs: the champion pool and per-unit item analytics. */
+export function BottomTabs({ defaultValue, className, champions }: BottomTabsProps) {
   return (
     <Tabs defaultValue={defaultValue || "overview"} className={className}>
       <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0">

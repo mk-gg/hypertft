@@ -46,7 +46,7 @@ export type UnitsData = {
   patch: string
   units: TFTUnit[]
   traits: TFTTrait[]
-  items: unknown[]
+  items: TFTItem[]
 }
 
 export type TFTItem = {
@@ -144,5 +144,6 @@ export type SuggestResult = {
   suggested_comps: SuggestedComp[]
   additions: CompAdditionSuggest[]
   mutations: CompMutation[]
-  exact_items: UnitItemStats[]   
+  exact_items: UnitItemStats[]  // items from exact comp matches
+  super_items: UnitItemStats[]  // items from superset matches
 }

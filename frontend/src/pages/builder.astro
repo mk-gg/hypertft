@@ -2,9 +2,9 @@
 import Layout from '@/layouts/Layout.astro'
 import PageHead from '@/components/PageHead.astro'
 import TopBar from '@/components/TopBar.astro'
-import { Board } from '@/components/ui/board'
+import { Board } from '@/components/builder/board'
 import BottomPanel from '@/components/BottomPanel.astro'
-import { RecommendedPanelTabs } from '@/components/ui/recommended-panel-tabs'
+import { RecommendedPanelTabs } from '@/components/builder/recommended-panel-tabs'
 ---
 <Layout class="max-w-3xl">
     <PageHead slot="head" title="Builder" />
@@ -31,10 +31,7 @@ import { RecommendedPanelTabs } from '@/components/ui/recommended-panel-tabs'
 
                 <!-- Bottom: Champion pool -->
                 <div class="p-2 pt-0">
-                  <BottomPanel>
-                    <div slot="overview"></div>
-                    <div slot="analytics"></div>
-                  </BottomPanel>
+                  <BottomPanel />
                 </div>
 
             </div>

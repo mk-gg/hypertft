@@ -1,110 +1,28 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { useStore } from '@nanostores/react'
-import { cn, avgToTier, tierColor, tftIconUrl } from '@/lib/utils'
-import { postSuggest, getUnitsMap } from '@/lib/api'
-import { $activeUnits, $placements, placeUnit, addUnitToRandomHex } from '@/store/boardStore'
-import type { SuggestResult } from '@/types'
-
-const BOARD_ROWS = 4
-const BOARD_COLS = 7
+import { cn, avgToTier, tierColor, tftIconUrl, costBorderClass, deltaColor } from '@/lib/utils'
+import { $activeUnits, addUnitByName, swapUnitByName } from '@/store/boardStore'
+import type { SuggestResult, TFTUnit } from '@/types'
 
 interface Props {
-  units?: string[]
-  threshold?: number
-  limit?: number
-  className?: string
+  /** Which suggestion section to render; omit to render all of them. */
   mode?: 'additions' | 'mutations' | 'comps'
-  externalResult?: SuggestResult | null
-  externalUnitsMap?: Map<string, any>
+  result: SuggestResult | null
+  unitsMap: Map<string, TFTUnit>
   isLoading?: boolean
+  className?: string
 }
 
-export function RecommendedPanel({
-  units: propsUnits,
-  threshold,
-  limit,
-  className,
-  mode,
-  externalResult,
-  externalUnitsMap,
-  isLoading,
-}: Props) {
-  const activeUnits = useStore($activeUnits)
-  const units = propsUnits && propsUnits.length > 0 ? propsUnits : activeUnits
-
-  const [result, setResult] = useState<SuggestResult | null>(externalResult || null)
-  const [debouncedUnits, setDebouncedUnits] = useState<string[]>(units)
-  const [unitsMap, setUnitsMap] = useState<Map<string, any>>(externalUnitsMap || new Map())
-  const [loading, setLoading] = useState(isLoading || false)
-
-  // ✅ Write to $placements, not $activeUnits
-  const handleAddUnit = (name: string) => {
-    const unit = unitsMap?.get(name.toLowerCase())
-    if (!unit) return
-    addUnitToRandomHex(unit, BOARD_ROWS, BOARD_COLS)
-  }
-
-  // ✅ Find the hex key and replace the unit in $placements
-  const handleSwapUnit = (unitOutName: string, unitInName: string) => {
-    const unitIn = unitsMap?.get(unitInName.toLowerCase())
-    if (!unitIn) return
-
-    const placements = $placements.get()
-    const key = Object.entries(placements).find(
-      ([, u]) => u.name.toLowerCase() === unitOutName.toLowerCase()
-    )?.[0]
-
-    if (key) {
-      placeUnit(key, unitIn)
-    } else {
-      // Unit to swap out isn't on board — just add it
-      addUnitToRandomHex(unitIn, BOARD_ROWS, BOARD_COLS)
-    }
-  }
-
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedUnits(units), 500)
-    return () => clearTimeout(handler)
-  }, [units])
-
-  useEffect(() => {
-    if (externalResult !== undefined) {
-      setResult(externalResult)
-      if (externalUnitsMap) setUnitsMap(externalUnitsMap)
-      setLoading(!!isLoading)
-      return
-    }
-
-    if (!debouncedUnits || debouncedUnits.length === 0) {
-      setResult(null)
-      return
-    }
-
-    async function fetchData() {
-      setLoading(true)
-      try {
-        const [suggestRes, mapRes] = await Promise.all([
-          postSuggest({
-            units: debouncedUnits,
-            ...(threshold !== undefined && { similarity_threshold: threshold }),
-            ...(limit !== undefined && { limit }),
-          }),
-          getUnitsMap(),
-        ])
-        setResult(suggestRes)
-        setUnitsMap(mapRes)
-      } catch (err) {
-        console.error('Failed to fetch suggestions:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [debouncedUnits, threshold, limit, externalResult, externalUnitsMap, isLoading])
+/**
+ * Renders suggestion results for the current board: similar comps,
+ * unit additions, and unit swaps. Purely presentational — data is
+ * fetched by the parent (RecommendedPanelTabs) and passed in.
+ */
+export function RecommendedPanel({ mode, result, unitsMap, isLoading, className }: Props) {
+  const units = useStore($activeUnits)
 
   function unitData(name: string) {
-    const unit = unitsMap?.get(name.toLowerCase())
+    const unit = unitsMap.get(name.toLowerCase())
     return {
       name,
       icon: unit?.icon ? tftIconUrl(unit.icon) : null,
@@ -112,10 +30,7 @@ export function RecommendedPanel({
     }
   }
 
-  const deltaColor = (delta: number) =>
-    delta < -1.5 ? '#22a55a' : delta < -0.8 ? '#c89b3c' : '#98a0b3'
-
-  if (loading && !result) {
+  if (isLoading && !result) {
     return (
       <div className={cn('flex w-full flex-col gap-6 animate-pulse', className)}>
         <div className="h-32 w-full rounded-lg bg-muted/20" />
@@ -155,13 +70,7 @@ export function RecommendedPanel({
                 <div key={`${name}-${i}`} className="relative shrink-0" title={u.name}>
                   {u.icon ? (
                     <img src={u.icon} alt={u.name} width={36} height={36}
-                      className={cn('h-8 w-8 rounded border-2',
-                        u.cost === 1 && 'border-[#808080]/60',
-                        u.cost === 2 && 'border-[#22a55a]/60',
-                        u.cost === 3 && 'border-[#2f6fd6]/60',
-                        u.cost === 4 && 'border-[#b44af0]/60',
-                        u.cost === 5 && 'border-[#f0c040]/60',
-                      )}
+                      className={cn('h-8 w-8 rounded border-2', costBorderClass(u.cost))}
                     />
                   ) : (
                     <div className="flex h-8 w-8 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[8px]">
@@ -209,36 +118,32 @@ export function RecommendedPanel({
                       }
                       const seenCount: Record<string, number> = {}
                       return comp.units.map((name, j) => {
-                      const u = unitData(name)
-                      const nk = name.toLowerCase()
-                      seenCount[nk] = (seenCount[nk] ?? 0) + 1
-                      const isMissing = seenCount[nk] > (ownedCount[nk] ?? 0)
-                      return (
-                        <div
-                          key={j}
-                          className={cn('relative shrink-0', isMissing && 'cursor-pointer hover:scale-110 transition-transform')}
-                          title={`${u.name}${isMissing ? ' (click to add)' : ''}`}
-                          onClick={() => isMissing && handleAddUnit(u.name)}
-                        >
-                          {u.icon ? (
-                            <img src={u.icon} alt={u.name} width={32} height={32}
-                              className={cn('h-7 w-7 rounded border-2 transition-opacity',
-                                isMissing ? 'opacity-40 grayscale' : 'opacity-100',
-                                u.cost === 1 && 'border-[#808080]/60',
-                                u.cost === 2 && 'border-[#22a55a]/60',
-                                u.cost === 3 && 'border-[#2f6fd6]/60',
-                                u.cost === 4 && 'border-[#b44af0]/60',
-                                u.cost === 5 && 'border-[#f0c040]/60',
-                              )}
-                            />
-                          ) : (
-                            <div className={cn('flex h-7 w-7 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[8px]', isMissing && 'opacity-40')}>
-                              {u.name.slice(0, 2)}
-                            </div>
-                          )}
-                          {isMissing && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#c89b3c]" />}
-                        </div>
-                      )
+                        const u = unitData(name)
+                        const nk = name.toLowerCase()
+                        seenCount[nk] = (seenCount[nk] ?? 0) + 1
+                        const isMissing = seenCount[nk] > (ownedCount[nk] ?? 0)
+                        return (
+                          <div
+                            key={j}
+                            className={cn('relative shrink-0', isMissing && 'cursor-pointer hover:scale-110 transition-transform')}
+                            title={`${u.name}${isMissing ? ' (click to add)' : ''}`}
+                            onClick={() => isMissing && addUnitByName(u.name, unitsMap)}
+                          >
+                            {u.icon ? (
+                              <img src={u.icon} alt={u.name} width={32} height={32}
+                                className={cn('h-7 w-7 rounded border-2 transition-opacity',
+                                  isMissing ? 'opacity-40 grayscale' : 'opacity-100',
+                                  costBorderClass(u.cost),
+                                )}
+                              />
+                            ) : (
+                              <div className={cn('flex h-7 w-7 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[8px]', isMissing && 'opacity-40')}>
+                                {u.name.slice(0, 2)}
+                              </div>
+                            )}
+                            {isMissing && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#c89b3c]" />}
+                          </div>
+                        )
                       })
                     })()}
                   </div>
@@ -257,17 +162,11 @@ export function RecommendedPanel({
               const u = unitData(add.unit)
               return (
                 <div key={i} className="flex items-center gap-3 px-3 py-2 hover:bg-[#1a1c2b]/60 transition-colors cursor-pointer group"
-                  onClick={() => handleAddUnit(add.unit)}
+                  onClick={() => addUnitByName(add.unit, unitsMap)}
                 >
                   {u.icon ? (
                     <img src={u.icon} alt={u.name} width={32} height={32}
-                      className={cn('h-7 w-7 shrink-0 rounded border-2 group-hover:border-primary/50',
-                        u.cost === 1 && 'border-[#808080]/60',
-                        u.cost === 2 && 'border-[#22a55a]/60',
-                        u.cost === 3 && 'border-[#2f6fd6]/60',
-                        u.cost === 4 && 'border-[#b44af0]/60',
-                        u.cost === 5 && 'border-[#f0c040]/60',
-                      )}
+                      className={cn('h-7 w-7 shrink-0 rounded border-2 group-hover:border-primary/50', costBorderClass(u.cost))}
                     />
                   ) : (
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[8px]">
@@ -293,17 +192,11 @@ export function RecommendedPanel({
               const uIn = unitData(mut.unit_in)
               return (
                 <div key={i} className="flex items-center gap-2 px-3 py-2 hover:bg-[#1a1c2b]/60 transition-colors cursor-pointer group"
-                  onClick={() => handleSwapUnit(mut.unit_out, mut.unit_in)}
+                  onClick={() => swapUnitByName(mut.unit_out, mut.unit_in, unitsMap)}
                 >
                   {uOut.icon ? (
                     <img src={uOut.icon} alt={uOut.name} width={28} height={28}
-                      className={cn('h-6 w-6 shrink-0 rounded border-2 grayscale opacity-50',
-                        uOut.cost === 1 && 'border-[#808080]/60',
-                        uOut.cost === 2 && 'border-[#22a55a]/60',
-                        uOut.cost === 3 && 'border-[#2f6fd6]/60',
-                        uOut.cost === 4 && 'border-[#b44af0]/60',
-                        uOut.cost === 5 && 'border-[#f0c040]/60',
-                      )}
+                      className={cn('h-6 w-6 shrink-0 rounded border-2 grayscale opacity-50', costBorderClass(uOut.cost))}
                     />
                   ) : (
                     <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[7px] opacity-50">
@@ -315,13 +208,7 @@ export function RecommendedPanel({
                   </svg>
                   {uIn.icon ? (
                     <img src={uIn.icon} alt={uIn.name} width={28} height={28}
-                      className={cn('h-6 w-6 shrink-0 rounded border-2 group-hover:border-primary/50',
-                        uIn.cost === 1 && 'border-[#808080]/60',
-                        uIn.cost === 2 && 'border-[#22a55a]/60',
-                        uIn.cost === 3 && 'border-[#2f6fd6]/60',
-                        uIn.cost === 4 && 'border-[#b44af0]/60',
-                        uIn.cost === 5 && 'border-[#f0c040]/60',
-                      )}
+                      className={cn('h-6 w-6 shrink-0 rounded border-2 group-hover:border-primary/50', costBorderClass(uIn.cost))}
                     />
                   ) : (
                     <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[7px]">

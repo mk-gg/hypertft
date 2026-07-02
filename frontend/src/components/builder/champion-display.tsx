@@ -1,11 +1,11 @@
 import { Button } from '@/components/ui/button'
-import { cn, tftIconUrl } from '@/lib/utils' 
+import { cn, tftIconUrl } from '@/lib/utils'
 import type { TFTUnit } from '@/types'
 import React, { useMemo, useState } from 'react'
 
 interface ChampionDisplayProps {
-  units: TFTUnit[];
-  className?: string;
+  units: TFTUnit[]
+  className?: string
 }
 
 const COST_COLORS: Record<number, string> = {
@@ -16,41 +16,40 @@ const COST_COLORS: Record<number, string> = {
   5: 'border-amber-400',
 }
 
+/**
+ * Searchable, cost-filterable champion pool. Champions are added to
+ * the board by click (random empty hex) or by dragging onto a hex.
+ */
 export function ChampionDisplay({ units, className }: ChampionDisplayProps) {
-  const [search, setSearch] = useState('');
-  const [selectedCost, setSelectedCost] = useState<number | null>(null);
+  const [search, setSearch] = useState('')
+  const [selectedCost, setSelectedCost] = useState<number | null>(null)
 
   const filteredUnits = useMemo(() => {
     return units
       .filter((unit) => {
-        const matchesName = unit.name.toLowerCase().includes(search.toLowerCase());
-        const matchesCost = selectedCost === null || unit.cost === selectedCost;
-        return matchesName && matchesCost;
+        const matchesName = unit.name.toLowerCase().includes(search.toLowerCase())
+        const matchesCost = selectedCost === null || unit.cost === selectedCost
+        return matchesName && matchesCost
       })
       .sort((a, b) => {
         // Special non-champion units (Golem, Training Dummy, Mini Black Hole)
         // have no traits — sort them after all real champions.
-        const aSpecial = a.traits.length === 0;
-        const bSpecial = b.traits.length === 0;
-        if (aSpecial !== bSpecial) return aSpecial ? 1 : -1;
-        return a.cost - b.cost || a.name.localeCompare(b.name);
-      });
-  }, [units, search, selectedCost]);
+        const aSpecial = a.traits.length === 0
+        const bSpecial = b.traits.length === 0
+        if (aSpecial !== bSpecial) return aSpecial ? 1 : -1
+        return a.cost - b.cost || a.name.localeCompare(b.name)
+      })
+  }, [units, search, selectedCost])
 
   const handleUnitClick = (unit: TFTUnit) => {
-    // Broadcast a command to add the unit to a random slot
-    window.dispatchEvent(new CustomEvent('tft-unit-add-random', { 
-      detail: unit 
-    }));
-  };
+    window.dispatchEvent(new CustomEvent('tft-unit-add-random', { detail: unit }))
+  }
 
   const handleDragStart = (e: React.DragEvent, unit: TFTUnit) => {
-    // Store unit data in the drag event
-    e.dataTransfer.setData('tft-unit', JSON.stringify(unit));
-    // Optional: visual feedback
-    e.dataTransfer.effectAllowed = 'move';
-    window.dispatchEvent(new CustomEvent('tft-drag-start', { detail: unit }));
-  };
+    e.dataTransfer.setData('tft-unit', JSON.stringify(unit))
+    e.dataTransfer.effectAllowed = 'move'
+    window.dispatchEvent(new CustomEvent('tft-drag-start', { detail: unit }))
+  }
 
   return (
     <div className={cn('flex flex-col gap-4 p-4', className)}>
@@ -112,5 +111,5 @@ export function ChampionDisplay({ units, className }: ChampionDisplayProps) {
         )}
       </div>
     </div>
-  );
+  )
 }

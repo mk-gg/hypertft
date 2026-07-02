@@ -1,5 +1,9 @@
 import type { IconMap, SocialLink, Site } from '@/types'
 
+/** Hex-grid dimensions of the team-builder board. */
+export const BOARD_ROWS = 4
+export const BOARD_COLS = 7
+
 export const SITE: Site = {
   title: 'HyperTFT',
   description: 'Find trending TFT comps',

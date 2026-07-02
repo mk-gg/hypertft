@@ -1,31 +1,25 @@
 ---
-import { BottomTabs } from '@/components/ui/bottom-tabs'
+import { BottomTabs } from '@/components/builder/bottom-tabs'
 import { cn } from '@/lib/utils'
-import { getUnits } from '@/lib/api' 
+import { getUnits } from '@/lib/api'
 
 interface Props {
   defaultValue?: string
   className?: string
 }
 
-const { defaultValue = "overview", className } = Astro.props;
+const { defaultValue = 'overview', className } = Astro.props
 
+const unitsData = await getUnits()
 
-const unitsData = await getUnits();
-
-const champions = unitsData.units.filter(unit => 
-  !unit.id.toLowerCase().includes('emblem') && 
+// Exclude emblems and item-flagged entries — only real champions
+// belong in the pool.
+const champions = unitsData.units.filter(unit =>
+  !unit.id.toLowerCase().includes('emblem') &&
   !unit.id.toLowerCase().includes('tft_item')
 )
 ---
 
 <div class={cn('border rounded-xl p-4', className)}>
-  <BottomTabs client:load defaultValue={defaultValue} className="w-full" champions={champions}>
-    <div slot="overview">
-      <slot name="overview" /> {/* This slot is now for additional content or overriding */}
-    </div>
-    <div slot="analytics">
-      <slot name="analytics"><div class="py-4 text-sm text-muted-foreground">Detailed analytics and statistics will appear here.</div></slot>
-    </div>
-  </BottomTabs>
+  <BottomTabs client:load defaultValue={defaultValue} className="w-full" champions={champions} />
 </div>

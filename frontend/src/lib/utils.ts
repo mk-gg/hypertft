@@ -45,3 +45,11 @@ const COST_BORDER_CLASS: Record<number, string> = {
 export function costBorderClass(cost: number): string {
   return COST_BORDER_CLASS[cost] ?? COST_BORDER_CLASS[1]
 }
+
+/**
+ * Color for an avg-placement delta: green for a strong improvement,
+ * gold for a moderate one, gray otherwise.
+ */
+export function deltaColor(delta: number): string {
+  return delta < -1.5 ? '#22a55a' : delta < -0.8 ? '#c89b3c' : '#98a0b3'
+}

@@ -2,19 +2,21 @@ import React, { useEffect, useState } from 'react'
 import { useStore } from '@nanostores/react'
 import { $activeUnits } from '@/store/boardStore'
 import { postSuggest, getUnitsMap, getItemsMap } from '@/lib/api'
-import { tftIconUrl, cn } from '@/lib/utils'
-import type { SuggestResult, UnitItemStats } from '@/types'
+import { tftIconUrl, cn, costBorderClass, deltaColor } from '@/lib/utils'
+import type { SuggestResult, UnitItemStats, TFTUnit, TFTItem } from '@/types'
 
 type Mode = 'exact' | 'super'
 
-const deltaColor = (delta: number) =>
-  delta < -1.5 ? '#22a55a' : delta < -0.8 ? '#c89b3c' : '#98a0b3'
-
+/**
+ * Recommended items per unit for the current board, with an
+ * exact-comp / superset toggle. Fetches its own data (debounced)
+ * whenever the board changes.
+ */
 export function ItemsPanel() {
   const activeUnits = useStore($activeUnits)
   const [result, setResult] = useState<SuggestResult | null>(null)
-  const [unitsMap, setUnitsMap] = useState<Map<string, any>>(new Map())
-  const [itemsMap, setItemsMap] = useState<Map<string, any>>(new Map())
+  const [unitsMap, setUnitsMap] = useState<Map<string, TFTUnit>>(new Map())
+  const [itemsMap, setItemsMap] = useState<Map<string, TFTItem>>(new Map())
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<Mode>('exact')
 
@@ -62,14 +64,6 @@ export function ItemsPanel() {
 
   function unitCost(name: string) {
     return unitsMap.get(name.toLowerCase())?.cost ?? 1
-  }
-
-  const COST_BORDER: Record<number, string> = {
-    1: 'border-[#808080]/60',
-    2: 'border-[#22a55a]/60',
-    3: 'border-[#2f6fd6]/60',
-    4: 'border-[#b44af0]/60',
-    5: 'border-[#f0c040]/60',
   }
 
   if (!activeUnits.length) {
@@ -131,10 +125,10 @@ export function ItemsPanel() {
                     alt={unitStat.unit}
                     width={24}
                     height={24}
-                    className={cn('h-6 w-6 rounded border-2', COST_BORDER[cost])}
+                    className={cn('h-6 w-6 rounded border-2', costBorderClass(cost))}
                   />
                 ) : (
-                  <div className={cn('flex h-6 w-6 items-center justify-center rounded border-2 bg-[#1a1c2b] text-[8px]', COST_BORDER[cost])}>
+                  <div className={cn('flex h-6 w-6 items-center justify-center rounded border-2 bg-[#1a1c2b] text-[8px]', costBorderClass(cost))}>
                     {unitStat.unit.slice(0, 2)}
                   </div>
                 )}
