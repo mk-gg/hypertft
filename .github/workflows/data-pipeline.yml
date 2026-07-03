@@ -32,13 +32,9 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       REDIS_URL:    ${{ secrets.REDIS_URL }}
       RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
-      # Platform rotation for scheduled runs. Groups are separated by '|',
-      # platforms within a group by spaces. Each day collects ONE group, cycling
-      # by day-of-year, so every region is refreshed across the cycle without a
-      # single run exceeding the 60-min budget (~10 min/platform). Trim or
-      # reorder groups to taste; a manual run can override with its own input.
-      # Two groups → each region refreshed every other day.
-      PLATFORM_ROTATION: 'na1 euw1|kr sg2|vn2 oc1'
+      # Platforms used when none are passed (scheduled runs). Keep this small —
+      # all 16 regions takes >1h. These three cover the main metas.
+      DEFAULT_PLATFORMS: 'euw1 sg2'
     steps:
       - uses: actions/checkout@v4
 
@@ -53,15 +49,8 @@ jobs:
 
       - name: Collect new matches
         run: |
-          # Manual dispatch can pin platforms; otherwise rotate by day-of-year.
           PLATFORMS="${{ inputs.platforms }}"
-          if [ -z "$PLATFORMS" ]; then
-            IFS='|' read -ra GROUPS <<< "$PLATFORM_ROTATION"
-            DOY=$(date -u +%j)                       # day of year, e.g. 173
-            IDX=$(( 10#$DOY % ${#GROUPS[@]} ))        # 10# forces base-10 (avoid octal)
-            PLATFORMS="${GROUPS[$IDX]}"
-            echo "Rotation: day-of-year $DOY -> group $((IDX + 1))/${#GROUPS[@]}"
-          fi
+          PLATFORMS="${PLATFORMS:-$DEFAULT_PLATFORMS}"
           LIMIT_ARG=""
           if [ -n "${{ inputs.limit }}" ]; then
             LIMIT_ARG="--limit ${{ inputs.limit }}"
