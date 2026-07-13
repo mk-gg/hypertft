@@ -25,7 +25,7 @@ export const NAV_LINKS: SocialLink[] = [
 
 export const SOCIAL_LINKS: SocialLink[] = [
   {
-    href: 'https://github.com/mk-gg',
+    href: 'https://github.com/mk-gg/hypertft',
     label: 'GitHub',
   },
 ]
