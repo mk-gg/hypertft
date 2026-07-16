@@ -1,0 +1,19 @@
+[Unit]
+Description=HyperTFT API (FastAPI/uvicorn)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=hypertft
+WorkingDirectory=/opt/hypertft/backend
+# Single worker: on 1 GB RAM the memory budget matters more than parallelism,
+# and the Redis cache absorbs read load anyway.
+ExecStart=/opt/hypertft/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+# Keep a runaway process from taking the box down with it.
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target
