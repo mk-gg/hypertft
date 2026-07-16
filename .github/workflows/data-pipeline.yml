@@ -32,9 +32,13 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       REDIS_URL:    ${{ secrets.REDIS_URL }}
       RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
-      # Platforms used when none are passed (scheduled runs). Keep this small —
-      # all 16 regions takes >1h. These three cover the main metas.
-      DEFAULT_PLATFORMS: 'euw1 sg2'
+      # Platform rotation for scheduled runs. Groups are separated by '|',
+      # platforms within a group by spaces. Each day collects ONE group,
+      # cycling by day-of-year (resolved by scripts/select_platforms.py), so
+      # every region refreshes on a 3-day cycle while each run stays well
+      # under the 60-minute budget. A manual run with an explicit platforms
+      # input bypasses the rotation.
+      PLATFORM_ROTATION: 'na1 euw1|kr sg2|vn2 oc1'
     steps:
       - uses: actions/checkout@v4
 
@@ -47,16 +51,23 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Resolve which platforms to collect (manual override, else day-of-year
+      # rotation). Runs in Python, not inline bash — the '|' group separators
+      # are shell metacharacters and must never reach the command line.
+      - name: Select platforms
+        id: select
+        env:
+          MANUAL_PLATFORMS: ${{ inputs.platforms }}
+        run: python scripts/select_platforms.py
+
       - name: Collect new matches
         run: |
-          PLATFORMS="${{ inputs.platforms }}"
-          PLATFORMS="${PLATFORMS:-$DEFAULT_PLATFORMS}"
           LIMIT_ARG=""
           if [ -n "${{ inputs.limit }}" ]; then
             LIMIT_ARG="--limit ${{ inputs.limit }}"
           fi
-          echo "Collecting platforms: $PLATFORMS  $LIMIT_ARG"
-          python -m collector.main --platforms $PLATFORMS $LIMIT_ARG
+          echo "Collecting platforms: ${{ steps.select.outputs.platforms }}  $LIMIT_ARG"
+          python -m collector.main --platforms ${{ steps.select.outputs.platforms }} $LIMIT_ARG
 
       - name: Aggregate stats
         run: python -m aggregator.main
