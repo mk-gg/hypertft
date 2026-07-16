@@ -1,7 +1,4 @@
-"""
-collector/rate_limiter.py
-Async token-bucket rate limiter for Riot API constraints.
-"""
+"""Async token-bucket rate limiter for Riot API constraints."""
 
 from __future__ import annotations
 
@@ -10,8 +7,8 @@ import time
 
 
 class RateLimiter:
-    """
-    Enforces two sliding-window limits concurrently:
+    """Enforces two sliding-window limits concurrently:.
+
       - per_second : max requests in any 1-second window
       - per_2min   : max requests in any 120-second window
 

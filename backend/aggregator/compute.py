@@ -1,92 +1,26 @@
-"""
-aggregator/compute.py
-Pure computation — no I/O.  Takes a list of participant dicts,
-returns aggregated comp stats ready for PostgreSQL.
+"""Pure aggregation math — no I/O.
+
+Takes a list of participant dicts and returns aggregated comp stats ready to
+write to PostgreSQL.
 """
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
-from typing import Any
 
-from shared.constants import is_real_item
-from shared.patch_map import resolve_tft_patch
-
-
-def norm_unit(raw: str) -> str:
-    """'TFT17_Akali' or 'TFT_Unit_Akali' → 'akali'"""
-    return re.sub(r"^TFT\w+_", "", raw, flags=re.IGNORECASE).lower()
-
-
-def comp_key(units: list[str]) -> str:
-    """Stable sorted key: 'ahri|akali|amumu'"""
-    return "|".join(sorted(units))
+from shared.compute_utils import comp_key, norm_unit  # noqa: F401  (re-export)
 
 
 def jaccard(a: set, b: set) -> float:
+    """Return the Jaccard similarity of two sets (1.0 for two empty sets)."""
     if not a and not b:
         return 1.0
     return len(a & b) / len(a | b)
 
 
 def safe_avg(values: list[float]) -> float:
+    """Return the mean of ``values``, or 0.0 for an empty list."""
     return sum(values) / len(values) if values else 0.0
-
-
-def extract_participants(raw_matches: list[dict]) -> list[dict]:
-    """
-    Flatten raw match JSONs into a list of participant dicts.
-    Each dict: { units: [str], placement: int, region: str, tft_patch: str }
-    """
-    participants = []
-    for match in raw_matches:
-        region = match.get("region", "unknown")
-
-        # Resolve TFT patch from stored field first, then parse game_version
-        tft_patch = match.get("tft_patch") or resolve_tft_patch(
-            match.get("info", {}).get("game_version", "")
-            or match.get("game_version", "")
-        )
-
-        pp = (
-            match.get("info", {}).get("participants")
-            or match.get("participants")
-            or []
-        )
-        for p in pp:
-            raw_units = p.get("units", [])
-            units = [
-                norm_unit(u["character_id"])
-                for u in raw_units
-                if u.get("character_id")
-            ]
-            placement = p.get("placement")
-            if units and placement is not None:
-                # items_by_unit: { norm_unit_name: [item_api_name, ...] }
-                items_by_unit: dict[str, list[str]] = {}
-                for u in raw_units:
-                    cid = u.get("character_id")
-                    if not cid:
-                        continue
-                    norm_name = norm_unit(cid)
-                    item_names = [
-                        i for i in u.get("itemNames", [])
-                        if is_real_item(i)  # drop empties + EmptyBag placeholder
-                    ]
-                    if item_names:
-                        items_by_unit[norm_name] = item_names
-
-                participants.append(
-                    {
-                        "units":         units,
-                        "placement":     int(placement),
-                        "region":        region,
-                        "tft_patch":     tft_patch,
-                        "items_by_unit": items_by_unit,
-                    }
-                )
-    return participants
 
 
 def aggregate_comps(
@@ -99,8 +33,8 @@ def aggregate_comps(
     top_mutations: int,
     top_additions: int,
 ) -> list[dict]:
-    """
-    Aggregate participants into comp stats including per-unit item recommendations.
+    """Aggregate participants into comp stats including per-unit item recommendations.
+
     Returns a list of comp dicts ready to write to PostgreSQL.
     """
     # ── 1. Bucket exact comps ──────────────────────────────────────────────
@@ -132,8 +66,7 @@ def aggregate_comps(
     comps_out: list[dict] = []
 
     for key in qualifying:
-        sel_set  = set(exact_unit_sets[key])
-        exact_pl = exact_buckets[key]
+        sel_set = set(exact_unit_sets[key])
 
         super_placements: list[float] = []
         swap_map: dict[str, list[int]] = defaultdict(list)
@@ -210,10 +143,7 @@ def aggregate_comps(
             bucket: dict[str, dict[str, list[int]]],
             unit_set: set[str],
         ) -> list[dict]:
-            """
-            For each unit in the comp, find the top-performing items
-            sorted by avg placement.
-            """
+            """Find each comp unit's top items, sorted by avg placement."""
             result = []
             for norm_name in unit_set:
                 display_name = name_map.get(norm_name, norm_name)
@@ -240,6 +170,7 @@ def aggregate_comps(
         comps_out.append({
             "comp_key":    key,
             "units":       [name_map.get(u, u) for u in exact_unit_sets[key]],
+            "exact_sum":   float(sum(exact_places)),
             "exact_avg":   round(safe_avg(exact_places), 4),
             "exact_n":     len(exact_places),
             "super_avg":   round(safe_avg(super_placements), 4),

@@ -1,25 +1,32 @@
-"""
-aggregator/main.py
-Computes comp stats from raw matches and writes them back.
+"""Computes comp stats from slim matches, in two tiers of work.
 
-Only patches that received new matches since the last run are re-aggregated
-(frozen patches are left untouched), which avoids needless rewrites of the
-whole table every run. Pass --full to force a rebuild of every patch (e.g.
-after changing aggregation parameters).
+Every run performs the cheap **incremental fold**: slim matches newer than the
+watermark are folded into each comp's running exact placement sum and count.
+Reads are proportional to *new* matches, so daily runs cost seconds and a few
+MB of transfer regardless of dataset size.
+
+A **deep pass** additionally recomputes the expensive relational stats
+(superset averages, mutations, additions, item recommendations) for every
+patch with new data, reading that patch's full slim window. It runs
+automatically every ``DEEP_INTERVAL_DAYS`` (default 3), or on demand via
+``--deep``. The deep pass also prunes slim matches for patches outside the
+retention window (``SLIM_WINDOW_PATCHES``, default 2) — their aggregated
+``comp_stats`` remain browsable forever.
 
 Usage:
-    python -m aggregator.main
-    python -m aggregator.main --full
+    python -m aggregator.main          # incremental fold (+ deep when due)
+    python -m aggregator.main --deep   # force a deep pass now
+    python -m aggregator.main --full   # deep pass over every windowed patch
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from aggregator.compute import aggregate_comps, norm_unit
 from aggregator.config import AggregatorConfig
-from aggregator.compute import aggregate_comps, extract_participants, norm_unit
 from aggregator.storage import AggregatorStorage
 from shared.cache import create_cache
 from shared.db import create_pool, init_schema
@@ -31,9 +38,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Watermark metadata key — ISO timestamp of the last successful aggregation.
-# Patches with matches newer than this are the only ones that need rework.
+# Watermark metadata keys — ISO timestamps of the last successful runs.
+# Slim matches newer than _WATERMARK_KEY are the only ones the incremental
+# fold reads; _DEEP_WATERMARK_KEY decides when a deep pass is due.
 _WATERMARK_KEY = "agg_watermark"
+_DEEP_WATERMARK_KEY = "agg_deep_watermark"
 
 
 def _patch_sort_key(patch: str) -> tuple[int, int]:
@@ -45,9 +54,9 @@ def _patch_sort_key(patch: str) -> tuple[int, int]:
         return (0, 0)
 
 
-def _read_watermark(storage: AggregatorStorage) -> datetime | None:
-    """Return the timestamp of the last successful run, or ``None``."""
-    rec = storage.read_meta(_WATERMARK_KEY)
+def _read_watermark(storage: AggregatorStorage, key: str) -> datetime | None:
+    """Return the timestamp stored under a watermark meta key, or ``None``."""
+    rec = storage.read_meta(key)
     if not rec or not rec.get("ts"):
         return None
     try:
@@ -57,8 +66,8 @@ def _read_watermark(storage: AggregatorStorage) -> datetime | None:
 
 
 def build_name_map(patch_data: dict | None) -> dict[str, str]:
-    """
-    Build {norm_id: display_name} from patch data stored in PostgreSQL.
+    """Build {norm_id: display_name} from patch data stored in PostgreSQL.
+
     e.g. {'akali': 'Akali', 'leblanc': 'LeBlanc'}
     """
     if not patch_data:
@@ -136,7 +145,99 @@ def _warn_unknown_units(participants: list[dict], patch_data: dict | None) -> No
         )
 
 
-def main(full: bool = False) -> None:
+def _run_deep_pass(
+    storage: AggregatorStorage,
+    config: AggregatorConfig,
+    patch_data: dict | None,
+    name_map: dict[str, str],
+    summaries: dict[str, dict],
+    since: datetime | None,
+    until: datetime,
+    window: list[str],
+) -> int:
+    """Recompute full comp stats for windowed patches dirty in ``(since, until]``.
+
+    Reads each dirty patch's complete slim data (up to ``until``) and replaces
+    its ``comp_stats`` rows wholesale (superset, mutations, additions, and
+    item recommendations included), then prunes slim data outside the
+    retention window.
+
+    Patches outside ``window`` are never recomputed, even if dirty: their
+    aggregates are frozen, and a handful of straggler matches must not
+    replace stats built from the full patch (the source rows are pruned).
+
+    Returns:
+        The number of patches recomputed.
+    """
+    dirty_patches = storage.get_dirty_patches(since, until)
+    out_of_window = sorted(set(dirty_patches) - set(window))
+    if out_of_window:
+        logger.info(
+            "Skipping out-of-window straggler patches: %s "
+            "(their stats are frozen).",
+            ", ".join(out_of_window),
+        )
+    dirty_patches = sorted(set(dirty_patches) & set(window))
+
+    if not dirty_patches:
+        logger.info("Deep pass — no windowed patches with new matches since %s.",
+                    since)
+        storage.prune_slim_window(window)
+        return 0
+
+    logger.info(
+        "Deep pass — %d patch(es) to recompute: %s",
+        len(dirty_patches), ", ".join(dirty_patches),
+    )
+
+    for tft_patch in dirty_patches:
+        participants, n_matches = storage.load_participants_for_patch(
+            tft_patch, until
+        )
+        logger.info(
+            "Aggregating patch %s — %d participants from %d matches "
+            "(threshold=%.0f%%) …",
+            tft_patch, len(participants), n_matches,
+            config.super_threshold * 100,
+        )
+
+        # Surface items/units present in matches but missing from the
+        # roster, so a missing icon shows up as a warning, not a silent gap.
+        _warn_unknown_items(participants, patch_data)
+        _warn_unknown_units(participants, patch_data)
+
+        comps = aggregate_comps(
+            participants=participants,
+            name_map=name_map,
+            super_threshold=config.super_threshold,
+            min_n_comp=config.min_n_comp,
+            min_n_mutation=config.min_n_mutation,
+            min_n_addition=config.min_n_addition,
+            top_mutations=config.top_mutations,
+            top_additions=config.top_additions,
+        )
+        written = storage.write_comp_stats(patch=tft_patch, comps=comps)
+        summaries[tft_patch] = {
+            "matches":      n_matches,
+            "participants": len(participants),
+            "comps":        written,
+        }
+        logger.info("Patch %s — %d comps written.", tft_patch, written)
+
+    # Retention: keep only the window patches' slim data. Aggregated
+    # comp_stats for pruned patches remain browsable forever.
+    storage.prune_slim_window(window)
+    return len(dirty_patches)
+
+
+def main(deep: bool = False, full: bool = False) -> None:
+    """Fold new matches into comp stats; run a deep recompute when due.
+
+    Args:
+        deep: Force a deep pass (full recompute of dirty patches) now.
+        full: Deep pass over every patch in the slim window, ignoring
+            watermarks (use after changing aggregation parameters).
+    """
     config = AggregatorConfig()
 
     pool = create_pool(config.database_url)
@@ -148,69 +249,105 @@ def main(full: bool = False) -> None:
         patch_data = storage.read_patch_data()
         name_map   = build_name_map(patch_data)
 
-        # Incremental watermark — only patches with new matches need rework.
-        # Capture the start time *before* reading so matches inserted during
-        # this run are picked up next time rather than silently skipped.
-        watermark   = None if full else _read_watermark(storage)
-        run_started = datetime.now(timezone.utc)
+        # All watermark math uses the DATABASE clock (created_at is assigned
+        # by Postgres), bounded above by a lagged cutoff. Every read in this
+        # run covers (watermark, until] and the new watermark becomes `until`,
+        # so each slim row is counted exactly once even if the collector is
+        # writing concurrently.
+        until          = storage.watermark_cutoff()
+        watermark      = _read_watermark(storage, _WATERMARK_KEY)
+        deep_watermark = _read_watermark(storage, _DEEP_WATERMARK_KEY)
 
-        dirty_patches = storage.get_dirty_patches(watermark)
-        if not dirty_patches:
-            logger.info(
-                "No new matches since %s — nothing to aggregate.", watermark
-            )
-            return
-
-        logger.info(
-            "%s aggregation — %d patch(es) to process: %s",
-            "Full" if full else "Incremental",
-            len(dirty_patches),
-            ", ".join(sorted(dirty_patches)),
+        deep_due = (
+            deep
+            or full
+            or deep_watermark is None
+            or (datetime.now(timezone.utc) - deep_watermark)
+            >= timedelta(days=config.deep_interval_days)
         )
+
+        # Retention window: the newest N patches present in slim data. Both
+        # tiers restrict themselves to it — straggler matches for pruned
+        # patches must never touch frozen stats.
+        window = sorted(
+            storage.get_dirty_patches(None, until),
+            key=_patch_sort_key,
+            reverse=True,
+        )[: config.slim_window_patches]
 
         # Per-patch counts, so the global summary can be assembled from frozen
         # + freshly computed patches without re-scanning the whole table.
         summaries: dict[str, dict] = storage.read_meta("patch_summaries") or {}
 
-        for tft_patch in sorted(dirty_patches):
-            matches      = storage.load_ranked_matches_for_patch(tft_patch)
-            participants = extract_participants(matches)
+        if deep_due:
+            # The deep pass covers everything the incremental fold would:
+            # dirty patches are replaced wholesale from rows up to `until`.
+            since = None if full else deep_watermark
+            processed = _run_deep_pass(
+                storage, config, patch_data, name_map, summaries,
+                since, until, window,
+            )
+            # Both watermarks advance to the read cutoff together, before the
+            # (rebuildable) summaries: a crash after this point costs nothing.
+            storage.write_meta_many({
+                _DEEP_WATERMARK_KEY: {"ts": until.isoformat()},
+                _WATERMARK_KEY:      {"ts": until.isoformat()},
+            })
+            if processed == 0 and not full:
+                return
+        else:
+            participants, n_matches = storage.load_new_participants(
+                watermark, until
+            )
+            in_window = [p for p in participants if p["tft_patch"] in window]
+            skipped = len(participants) - len(in_window)
+            if skipped:
+                logger.info(
+                    "Skipping %d straggler participants for out-of-window "
+                    "patches (stats frozen).", skipped,
+                )
+            if not in_window:
+                logger.info(
+                    "No new windowed matches in (%s, %s] — nothing to fold.",
+                    watermark, until,
+                )
+                # Advance past stragglers so they aren't re-read every run.
+                storage.write_meta_many(
+                    {_WATERMARK_KEY: {"ts": until.isoformat()}}
+                )
+                return
+
+            _warn_unknown_items(in_window, patch_data)
+            _warn_unknown_units(in_window, patch_data)
+
+            # The running-sum fold is not idempotent, so the watermark that
+            # marks these rows as consumed commits in the same transaction.
+            touched = storage.fold_exact_stats(
+                in_window, name_map,
+                advance_watermark_to=until.isoformat(),
+            )
+            for p in in_window:
+                s = summaries.setdefault(
+                    p["tft_patch"], {"matches": 0, "participants": 0, "comps": 0}
+                )
+                s["participants"] = s.get("participants", 0) + 1
             logger.info(
-                "Aggregating patch %s — %d participants from %d matches "
-                "(threshold=%.0f%%) …",
-                tft_patch, len(participants), len(matches),
-                config.super_threshold * 100,
+                "Incremental fold — %d participants from %d new matches "
+                "folded into %d comps.",
+                len(in_window), n_matches, touched,
             )
-
-            # Surface items/units present in matches but missing from the
-            # roster, so a missing icon shows up as a warning, not a silent gap.
-            _warn_unknown_items(participants, patch_data)
-            _warn_unknown_units(participants, patch_data)
-
-            comps = aggregate_comps(
-                participants=participants,
-                name_map=name_map,
-                super_threshold=config.super_threshold,
-                min_n_comp=config.min_n_comp,
-                min_n_mutation=config.min_n_mutation,
-                min_n_addition=config.min_n_addition,
-                top_mutations=config.top_mutations,
-                top_additions=config.top_additions,
-            )
-            written = storage.write_comp_stats(patch=tft_patch, comps=comps)
-            summaries[tft_patch] = {
-                "matches":      len(matches),
-                "participants": len(participants),
-                "comps":        written,
-            }
-            logger.info("Patch %s — %d comps written.", tft_patch, written)
-
-        storage.write_meta("patch_summaries", summaries)
 
         # ── Build summary metadata ─────────────────────────────────────────
         # comp_stats is the source of truth for which patches are browsable;
-        # the per-patch summaries supply the match/participant totals.
+        # the permanent ledger supplies true per-patch match totals.
         comp_counts  = storage.comp_patch_counts()
+        match_counts = storage.processed_match_counts()
+        for patch, count in match_counts.items():
+            summaries.setdefault(
+                patch, {"matches": 0, "participants": 0, "comps": 0}
+            )["matches"] = count
+        storage.write_meta("patch_summaries", summaries)
+
         available    = sorted(comp_counts, key=_patch_sort_key, reverse=True)
         latest_patch = available[0] if available else "unknown"
 
@@ -219,7 +356,7 @@ def main(full: bool = False) -> None:
             {
                 "patch":              latest_patch,
                 "set_number":         patch_data.get("set_number", 0) if patch_data else 0,
-                "total_matches":      sum(s.get("matches", 0) for s in summaries.values()),
+                "total_matches":      sum(match_counts.values()),
                 "total_participants": sum(s.get("participants", 0) for s in summaries.values()),
                 "total_comps":        sum(comp_counts.values()),
                 "last_updated":       datetime.now(timezone.utc).isoformat(),
@@ -228,12 +365,9 @@ def main(full: bool = False) -> None:
             },
         )
 
-        # Advance the watermark only after a fully successful run.
-        storage.write_meta(_WATERMARK_KEY, {"ts": run_started.isoformat()})
-
         logger.info(
-            "Aggregation complete — %d patch(es) updated, %d total comps. Latest: %s",
-            len(dirty_patches), sum(comp_counts.values()), latest_patch,
+            "Aggregation complete — %d total comps across %d patches. Latest: %s",
+            sum(comp_counts.values()), len(available), latest_patch,
         )
 
         # New stats are live — flush the API read cache so the next request
@@ -246,16 +380,23 @@ def main(full: bool = False) -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="HyperTFT stats aggregator")
+    parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Force a deep pass now (full recompute of patches with new "
+             "matches, plus retention pruning).",
+    )
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Re-aggregate every patch, ignoring the incremental watermark "
-             "(use after changing aggregation parameters).",
+        help="Deep pass over every patch in the slim window, ignoring "
+             "watermarks (use after changing aggregation parameters).",
     )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    main(full=args.full)
+    main(deep=args.deep, full=args.full)

@@ -1,12 +1,8 @@
-"""
-collector/config.py
-All configuration loaded from environment variables via pydantic-settings.
-"""
+"""All configuration loaded from environment variables via pydantic-settings."""
 
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 # Platform → regional routing map
 PLATFORM_TO_REGIONAL: dict[str, str] = {
@@ -156,4 +152,5 @@ class CollectorConfig(BaseSettings):
 
     @property
     def total_seed_puuids(self) -> int:
+        """Total PUUIDs collected per platform across all tier groups."""
         return sum(self.tier_group_quotas.values())

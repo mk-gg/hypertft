@@ -1,6 +1,4 @@
-"""
-shared/patch_map.py
-Translates internal Riot game_version strings → TFT display patch strings.
+"""Translates internal Riot game_version strings → TFT display patch strings.
 
 The game_version field in match data looks like:
     "Version 16.15.629.7318 (Apr 28 2025/11:22:27) [PUBLIC] <Releases/16.15>"
@@ -48,14 +46,14 @@ _VERSION_RE = re.compile(r"Version\s+(\d+\.\d+)", re.IGNORECASE)
 
 
 def parse_internal_version(game_version: str) -> str | None:
-    """
-    Extract the internal version number from a raw game_version string.
+    """Extract the internal version number from a raw game_version string.
 
-    Examples
-    --------
-    "Version 16.15.629.7318 (...)"  →  "16.15"
-    "16.15"                          →  "16.15"
-    ""                               →  None
+    Args:
+        game_version: Raw version string from the Riot match API, e.g.
+            ``"Version 16.15.629.7318 (...)"`` or a plain ``"16.15"``.
+
+    Returns:
+        The internal version (``"16.15"``), or ``None`` if parsing fails.
     """
     if not game_version:
         return None
@@ -72,18 +70,15 @@ def parse_internal_version(game_version: str) -> str | None:
 
 
 def resolve_tft_patch(game_version: str) -> str:
-    """
-    Given a raw game_version string from the Riot match API,
-    return the TFT display patch (e.g. "17.8").
+    """Map a raw game_version string to the TFT display patch.
 
-    Falls back to the internal version if not in the map,
-    or "unknown" if parsing fails entirely.
+    Args:
+        game_version: Raw version string from the Riot match API.
 
-    Examples
-    --------
-    "Version 16.15.629.7318 (...)"  →  "17.8"
-    "Version 16.99.0.0 (...)"       →  "16.99"   (unmapped, use internal)
-    ""                               →  "unknown"
+    Returns:
+        The TFT display patch (e.g. ``"17.8"``). Falls back to the internal
+        version if it is not in the map (e.g. ``"16.99"``), or ``"unknown"``
+        if parsing fails entirely.
     """
     internal = parse_internal_version(game_version)
     if internal is None:

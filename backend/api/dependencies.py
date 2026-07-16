@@ -1,7 +1,4 @@
-"""
-api/dependencies.py
-FastAPI dependency injection — shared PostgreSQL connection pool.
-"""
+"""FastAPI dependency injection — shared PostgreSQL connection pool."""
 
 from __future__ import annotations
 

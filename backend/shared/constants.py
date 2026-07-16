@@ -1,7 +1,4 @@
-"""
-shared/constants.py
-Constants shared across the collector, aggregator, and API.
-"""
+"""Constants shared across the collector, aggregator, and API."""
 
 from __future__ import annotations
 

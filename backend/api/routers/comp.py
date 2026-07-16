@@ -1,6 +1,5 @@
-"""
-api/routers/comp.py
-POST /comp          — stats for a given unit list on a specific patch
+"""POST /comp          — stats for a given unit list on a specific patch.
+
 POST /comp/suggest  — suggestions for a partial/full board
 GET  /comp/top      — top comps ranked by avg placement
 GET  /comp/patches  — list of all patches that have aggregated data
@@ -11,9 +10,9 @@ from __future__ import annotations
 import logging
 
 import psycopg
+from fastapi import APIRouter, HTTPException, Query
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
-from fastapi import APIRouter, HTTPException, Query
 
 from api.dependencies import CacheDep, PoolDep
 from shared.comp_engine import analyse, auto_threshold, build_name_map
@@ -308,9 +307,12 @@ def suggest_comp(
     try:
         with pool.connection() as conn:
             cur = conn.cursor(row_factory=dict_row)
+            # exact_n >= 3 mirrors the aggregator's MIN_N_COMP: the incremental
+            # fold stores comps below that threshold (running counts need them)
+            # but they are too noisy to drive suggestions.
             cur.execute(
                 f"SELECT {_COMP_COLUMNS} FROM comp_stats "
-                "WHERE patch = %s AND units_norm && %s",
+                "WHERE patch = %s AND units_norm && %s AND exact_n >= 3",
                 (resolved_patch, board_norm),
             )
             comps = cur.fetchall()

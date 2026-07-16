@@ -1,6 +1,4 @@
-"""
-api/main.py
-FastAPI application entry point.
+"""FastAPI application entry point.
 
 Run locally:
     uvicorn api.main:app --reload --port 8000

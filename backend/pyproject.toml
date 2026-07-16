@@ -1,0 +1,28 @@
+# Tooling configuration for the HyperTFT backend.
+#
+# Code style follows the Google Python Style Guide
+# (https://google.github.io/styleguide/pyguide.html), enforced via ruff:
+#   ruff check .        — lint (docstrings use the Google convention)
+#   ruff format .       — format
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# E/F: pycodestyle + pyflakes, I: import sorting, D: pydocstyle (Google).
+select = ["E", "F", "I", "D"]
+ignore = [
+    "E501",   # long lines — allowed where breaking hurts readability
+    "D100",   # missing module docstring — not all modules need one
+    "D104",   # missing package docstring (__init__.py)
+    "D105",   # missing magic-method docstring
+    "D107",   # missing __init__ docstring — documented at class level
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+# Google style: stdlib / third-party / first-party groups.
+known-first-party = ["aggregator", "api", "collector", "shared", "scripts"]

@@ -1,6 +1,4 @@
-"""
-shared/comp_engine.py
-Pure-Python comp analysis engine used by the suggest endpoint.
+"""Pure-Python comp analysis engine used by the suggest endpoint.
 
 No I/O — takes a list of comp dicts (from PostgreSQL or any source)
 and a board (list of unit names) and returns structured suggestions.
@@ -8,7 +6,6 @@ and a board (list of unit names) and returns structured suggestions.
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 
 from shared.models import (
@@ -20,10 +17,10 @@ from shared.models import (
     UnitItemRec,
 )
 
-
 # ── Similarity ─────────────────────────────────────────────────────────────
 
 def jaccard(a: set[str], b: set[str]) -> float:
+    """Return the Jaccard similarity of two sets (1.0 for two empty sets)."""
     if not a and not b:
         return 1.0
     intersection = len(a & b)
@@ -31,14 +28,18 @@ def jaccard(a: set[str], b: set[str]) -> float:
 
 
 def auto_threshold(board_size: int) -> float:
-    """
-    Auto-scale Jaccard threshold based on how many units are selected.
+    """Auto-scale Jaccard threshold based on how many units are selected.
+
     Smaller boards need a looser threshold to find meaningful matches.
     """
-    if board_size <= 1: return 0.20
-    if board_size <= 2: return 0.30
-    if board_size <= 3: return 0.40
-    if board_size <= 5: return 0.50
+    if board_size <= 1:
+        return 0.20
+    if board_size <= 2:
+        return 0.30
+    if board_size <= 3:
+        return 0.40
+    if board_size <= 5:
+        return 0.50
     return 0.60
 
 
@@ -50,16 +51,16 @@ def _norm(name: str) -> str:
 
 
 def _resolve_display(lower: str, name_map: dict[str, str]) -> str:
-    """
-    Convert a lowercase unit key back to display name.
+    """Convert a lowercase unit key back to display name.
+
     Falls back to title-case if not in the map.
     """
     return name_map.get(lower, lower.replace("-", " ").title())
 
 
 def build_name_map(units: list[dict]) -> dict[str, str]:
-    """
-    Build {lowercase_name: display_name} from a unit list.
+    """Build {lowercase_name: display_name} from a unit list.
+
     e.g. {"ahri": "Ahri", "leblanc": "LeBlanc"}
     """
     return {_norm(u["name"]): u["name"] for u in units if u.get("name")}
@@ -76,8 +77,8 @@ def _build_item_recs(
     min_n:         int = 2,
     top_items:     int = 8,
 ) -> list[UnitItemRec]:
-    """
-    Aggregate item stats across similar comps for each unit on the board.
+    """Aggregate item stats across similar comps for each unit on the board.
+
     Returns UnitItemRec list with ItemStat entries sorted by avg placement.
 
     source_key controls which pre-aggregated item bucket to read from:
@@ -143,9 +144,9 @@ def analyse(
     patch:      str,
     name_map:   dict[str, str],
 ) -> SuggestResponse:
-    """
-    Given a board (partial or full) and all aggregated comp stats for a patch,
-    return:
+    """Given a board (partial or full) and all aggregated comp stats for a patch,.
+
+    Return:
       - suggested_comps : best comps that contain the board's units
       - additions       : units to add (with avg placement + delta)
       - mutations       : unit swaps (with avg placement + delta)

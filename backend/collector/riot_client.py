@@ -1,6 +1,5 @@
-"""
-collector/riot_client.py
-All calls to the Riot Games TFT API.
+"""All calls to the Riot Games TFT API.
+
 Each method returns parsed JSON or None on failure.
 """
 
@@ -11,21 +10,21 @@ from typing import Any
 
 import aiohttp
 
-from collector.config import APEX_TIERS, TIER_GROUPS, PLATFORM_TO_REGIONAL
+from collector.config import APEX_TIERS, TIER_GROUPS
 from collector.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 
 class RiotClient:
-    """
-    Wraps all Riot API endpoints used by the collector.
+    """Wraps all Riot API endpoints used by the collector.
 
-    Parameters
-    ----------
-    api_key     : Riot Games personal/dev API key
-    rate_limiter: Shared RateLimiter instance
-    session     : aiohttp.ClientSession (caller owns lifecycle)
+    Attributes are provided at construction time:
+
+    Args:
+        api_key: Riot Games API key.
+        rate_limiter: Shared :class:`RateLimiter` instance (one per API key).
+        session: ``aiohttp.ClientSession``; the caller owns its lifecycle.
     """
 
     def __init__(
@@ -41,8 +40,8 @@ class RiotClient:
     # ── Internal HTTP ──────────────────────────────────────────────────────
 
     async def _get(self, url: str) -> Any | None:
-        """
-        Rate-limited GET with automatic 429 back-off (one retry).
+        """Rate-limited GET with automatic 429 back-off (one retry).
+
         Returns parsed JSON or None on any non-200 response.
         """
         await self._rate_limiter.acquire()
@@ -81,8 +80,8 @@ class RiotClient:
         platform: str,
         tier: str,
     ) -> list[dict]:
-        """
-        Fetch all entries for Challenger / Grandmaster / Master.
+        """Fetch all entries for Challenger / Grandmaster / Master.
+
         Returns a flat list of entry dicts (each has a 'puuid' field).
         """
         url = f"https://{platform}.api.riotgames.com/tft/league/v1/{tier.lower()}"
@@ -98,8 +97,8 @@ class RiotClient:
         division: str,
         page: int = 1,
     ) -> list[dict]:
-        """
-        Fetch one page of league entries for a tier/division.
+        """Fetch one page of league entries for a tier/division.
+
         Returns a list of entry dicts (each has a 'puuid' field).
         """
         url = (
@@ -147,9 +146,10 @@ class RiotClient:
         group_quotas: dict[str, int],
         seed_pages: int,
     ) -> list[str]:
-        """
-        Collect PUUIDs respecting per-tier-group quotas so every rank
-        (Challenger → Platinum) is represented in the seed pool.
+        """Collect seed PUUIDs with per-tier-group quotas.
+
+        Quotas ensure every rank group (Challenger → Platinum) is represented
+        in the seed pool.
 
         group_quotas maps group name → max PUUIDs for that group, e.g.:
           { "Challenger": 50, "Diamond": 75, "Platinum I-II": 75, ... }

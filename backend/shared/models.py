@@ -1,16 +1,13 @@
-"""
-shared/models.py
-Pydantic models used across collector, aggregator, and API.
-"""
+"""Pydantic models used across collector, aggregator, and API."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ── Patch / unit data ──────────────────────────────────────────────────────
 
 class UnitModel(BaseModel):
+    """A TFT unit (champion) from the patch roster."""
     id: str
     name: str
     cost: int
@@ -20,10 +17,12 @@ class UnitModel(BaseModel):
     @field_validator("icon", "name", "id", mode="before")
     @classmethod
     def coerce_none_to_str(cls, v: object) -> str:
+        """Coerce null/absent CDragon fields to empty strings."""
         return v if isinstance(v, str) else ""
 
 
 class TraitModel(BaseModel):
+    """A TFT trait from the patch roster."""
     id: str
     name: str
     icon: str = ""
@@ -31,10 +30,12 @@ class TraitModel(BaseModel):
     @field_validator("icon", "name", "id", mode="before")
     @classmethod
     def coerce_none_to_str(cls, v: object) -> str:
+        """Coerce null/absent CDragon fields to empty strings."""
         return v if isinstance(v, str) else ""
 
 
 class ItemModel(BaseModel):
+    """An equippable TFT item from the patch roster."""
     id: str
     name: str
     icon: str = ""
@@ -42,10 +43,12 @@ class ItemModel(BaseModel):
     @field_validator("icon", "name", "id", mode="before")
     @classmethod
     def coerce_none_to_str(cls, v: object) -> str:
+        """Coerce null/absent CDragon fields to empty strings."""
         return v if isinstance(v, str) else ""
 
 
 class PatchData(BaseModel):
+    """Full patch roster: set number, units, traits, and items."""
     set_number: int = Field(alias="set")
     patch: str
     units: list[UnitModel] = Field(default_factory=list)
@@ -58,6 +61,7 @@ class PatchData(BaseModel):
 # ── Placement stats ────────────────────────────────────────────────────────
 
 class PlacementStats(BaseModel):
+    """Average placement and sample size for one bucket."""
     avg: float
     n: int
 
@@ -72,6 +76,7 @@ class PlacementStats(BaseModel):
 #
 
 class MutationEntry(BaseModel):
+    """A one-for-one unit swap and its placement impact."""
     unit_out: str
     unit_in:  str
     avg:      float                    # avg placement with this swap applied
@@ -80,6 +85,7 @@ class MutationEntry(BaseModel):
 
 
 class AdditionEntry(BaseModel):
+    """A unit addition and its placement impact."""
     unit:  str
     avg:   float                       # avg placement with this unit added
     delta: float                       # avg - superset_avg of current board
@@ -105,6 +111,7 @@ class UnitItemRec(BaseModel):
 # ── Existing comp stats (POST /comp) ──────────────────────────────────────
 
 class CompStats(BaseModel):
+    """Aggregated stats for one exact comp."""
     units: list[str]
     exact: PlacementStats
     superset: PlacementStats
@@ -113,11 +120,13 @@ class CompStats(BaseModel):
 
 
 class CompRequest(BaseModel):
+    """Request body for POST /comp."""
     units: list[str] = Field(..., min_length=1, max_length=10)
     similarity_threshold: float = Field(default=0.60, ge=0.0, le=1.0)
 
 
 class CompResponse(BaseModel):
+    """Response body for POST /comp."""
     units:    list[str]
     exact:    PlacementStats
     superset: PlacementStats
@@ -130,6 +139,7 @@ class CompResponse(BaseModel):
 # ── Suggest endpoint models (POST /comp/suggest) ──────────────────────────
 
 class SuggestRequest(BaseModel):
+    """Request body for POST /comp/suggest."""
     units: list[str] = Field(
         ..., min_length=1, max_length=10,
         description="Current board — can be partial (1–10 units)",
@@ -146,6 +156,7 @@ class SuggestRequest(BaseModel):
 
 
 class SuggestedComp(BaseModel):
+    """One suggested comp with similarity to the current board."""
     units:     list[str]    # full comp units
     missing:   list[str]    # units not yet on the board
     exact_avg: float
@@ -154,6 +165,7 @@ class SuggestedComp(BaseModel):
 
 
 class SuggestResponse(BaseModel):
+    """Response body for POST /comp/suggest."""
     board:             list[str]
     patch:             str
     threshold_used:    float
@@ -169,6 +181,7 @@ class SuggestResponse(BaseModel):
 # ── Meta ───────────────────────────────────────────────────────────────────
 
 class MetaResponse(BaseModel):
+    """Response body for GET /meta."""
     patch: str
     set_number: int
     total_matches: int

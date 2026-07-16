@@ -1,6 +1,5 @@
-"""
-api/routers/meta.py
-GET /meta        — current patch info, match counts, last updated
+"""GET /meta        — current patch info, match counts, last updated.
+
 GET /meta/units  — full unit/trait/item roster from latest patch data
 """
 

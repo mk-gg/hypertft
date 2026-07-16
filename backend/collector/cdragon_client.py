@@ -1,6 +1,5 @@
-"""
-collector/cdragon_client.py
-Fetches current patch / unit / trait / item data from Community Dragon.
+"""Fetches current patch / unit / trait / item data from Community Dragon.
+
 No rate limiting needed — CDragon is a public CDN.
 """
 
@@ -20,7 +19,7 @@ CDRAGON_URL = "https://raw.communitydragon.org/latest/cdragon/tft/en_us.json"
 
 
 def _strip_prefix(raw: str) -> str:
-    """'TFT17_Akali' → 'Akali'"""
+    """'TFT17_Akali' → 'Akali'."""
     return re.sub(r"^TFT\w+_", "", raw, flags=re.IGNORECASE)
 
 
@@ -31,8 +30,8 @@ class CDragonClient:
         self._session = session
 
     async def fetch_patch_data(self) -> PatchData | None:
-        """
-        Pull the full CDragon blob and return a PatchData model.
+        """Pull the full CDragon blob and return a PatchData model.
+
         Returns None if the request fails.
         """
         logger.info("Fetching CDragon patch data …")
@@ -87,8 +86,7 @@ class CDragonClient:
 
     @staticmethod
     def _is_playable_unit(api_name: str, champion: dict) -> bool:
-        """
-        Filter out non-playable units CDragon includes in the champions list.
+        """Filter out non-playable units CDragon includes in the champions list.
 
         Known non-playable apiName patterns:
           TFTx_Enemy_   → PvE encounter bosses (Apex Primordian, etc.)
@@ -184,10 +182,11 @@ class CDragonClient:
 
     @staticmethod
     def _is_equippable(item: dict) -> bool:
-        """
+        """Return True if a CDragon entry is a real, unit-equippable item.
+
         CDragon ships ~3600 entries: augments, consumables, eggs, tactician
         gear, champion tokens, trait effects, market offerings, and internal
-        placeholders. We keep the real, unit-equippable items.
+        placeholders. Only the real, unit-equippable items are kept.
 
         Denylist-primary by design. We accept anything that looks like an item
         — apiName contains ``_item_``, is a trait ``SquadItem`` / ``AnomalyItem``,
@@ -239,10 +238,11 @@ class CDragonClient:
 
     @staticmethod
     def _parse_items(items: list[dict]) -> list[ItemModel]:
-        """
-        Filter CDragon's ~3600 entries down to unit-equippable items, including
-        the current set's artifacts, radiants, mechanic items, and any legacy-
-        named items the set reuses. Errs toward inclusion (see _is_equippable).
+        """Filter CDragon's ~3600 entries down to unit-equippable items.
+
+        Includes the current set's artifacts, radiants, mechanic items, and any
+        legacy-named items the set reuses. Errs toward inclusion (see
+        _is_equippable).
         """
         parsed = []
         for i in items:

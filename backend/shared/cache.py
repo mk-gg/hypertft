@@ -1,6 +1,4 @@
-"""
-shared/cache.py
-Redis cache-aside helper shared by the API and the data pipeline.
+"""Redis cache-aside helper shared by the API and the data pipeline.
 
 The API uses :meth:`Cache.get_json` / :meth:`Cache.set_json` to lazily cache
 read-heavy query results (the tier list, patch list, meta summary, and unit

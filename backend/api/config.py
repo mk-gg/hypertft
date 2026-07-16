@@ -1,4 +1,4 @@
-"""api/config.py"""
+"""API settings loaded from environment variables via pydantic-settings."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class APIConfig(BaseSettings):
+    """API settings loaded from .env or environment variables."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

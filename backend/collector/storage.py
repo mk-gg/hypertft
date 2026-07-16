@@ -1,7 +1,4 @@
-"""
-collector/storage.py
-PostgreSQL read/write operations used by the collector.
-"""
+"""PostgreSQL read/write operations used by the collector."""
 
 from __future__ import annotations
 
@@ -12,6 +9,7 @@ from psycopg_pool import ConnectionPool
 
 from shared.constants import is_ranked
 from shared.patch_map import resolve_tft_patch
+from shared.slim import extract_slim_participants
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +24,15 @@ def _resolve_patch(match_data: dict) -> str:
 
 
 class CollectorStorage:
-    """Handles all PostgreSQL operations for the collector:
+    """Handles all PostgreSQL operations for the collector.
 
-    - Check which match IDs already exist (to skip re-downloading).
-    - Write new raw match records.
+    - Check which match IDs were already processed (to skip re-downloading).
+    - Write slim match extracts plus the permanent dedup ledger.
     - Write/update patch and run metadata.
+
+    Raw match payloads are not stored: the slim extract (see shared/slim.py)
+    is written at ingest and the ~20 KB raw JSON is discarded, keeping storage
+    and egress flat as the dataset grows.
     """
 
     def __init__(self, pool: ConnectionPool) -> None:
@@ -39,70 +41,68 @@ class CollectorStorage:
     # ── Matches ──────────────────────────────────────────────────────────────
 
     async def get_existing_match_ids(self) -> set[str]:
-        """Return the set of all match IDs already stored.
+        """Return the set of all match IDs already processed.
 
         Kept ``async`` to preserve the collector's call site. The query itself
         is a blocking round-trip, which is acceptable for a batch job; the
         primary key index makes it an index-only scan.
         """
         with self._pool.connection() as conn:
-            rows = conn.execute("SELECT match_id FROM matches").fetchall()
+            rows = conn.execute(
+                "SELECT match_id FROM processed_matches"
+            ).fetchall()
         return {row[0] for row in rows}
 
-    def write_match(self, match_id: str, region: str, match_data: dict) -> bool:
-        """Write a single raw match record.
-
-        Stores the full match payload as JSONB and the resolved ``tft_patch``
-        for later filtering. Existing matches are left untouched.
-
-        Returns:
-            ``True`` if a new row was inserted, ``False`` if it already existed
-            or the match is not a Ranked game.
-        """
-        if not is_ranked(match_data):
-            return False
-        with self._pool.connection() as conn:
-            cur = conn.execute(
-                """
-                INSERT INTO matches (match_id, region, tft_patch, data)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (match_id) DO NOTHING
-                """,
-                (match_id, region, _resolve_patch(match_data), Json(match_data)),
-            )
-            return cur.rowcount > 0
-
     def write_matches_batch(self, matches: dict[str, dict], region: str) -> int:
-        """Insert many matches in a single transaction.
+        """Slim and insert many matches in a single transaction.
 
-        Already-stored matches are skipped via ``ON CONFLICT DO NOTHING``.
+        Each match lands in two tables atomically: its slim extract in
+        ``match_slim`` and its id in the permanent ``processed_matches``
+        dedup ledger. Already-processed matches are skipped via
+        ``ON CONFLICT DO NOTHING``.
 
         Returns:
-            The number of rows actually inserted.
+            The number of new matches recorded.
         """
         if not matches:
             return 0
 
         # Only Ranked games — the Riot endpoint can't filter by queue, so drop
         # Normal / Hyper Roll / Double Up matches here before they ever land.
-        params = [
-            (match_id, region, _resolve_patch(match_data), Json(match_data))
-            for match_id, match_data in matches.items()
-            if is_ranked(match_data)
-        ]
-        if not params:
+        slim_params: list[tuple] = []
+        for match_id, match_data in matches.items():
+            if not is_ranked(match_data):
+                continue
+            participants = extract_slim_participants(match_data)
+            if not participants:
+                continue
+            slim_params.append(
+                (match_id, region, _resolve_patch(match_data), Json(participants))
+            )
+        if not slim_params:
             return 0
+
+        ledger_params = [(m, r, p) for m, r, p, _ in slim_params]
         with self._pool.connection() as conn:
             cur = conn.cursor()
             cur.executemany(
                 """
-                INSERT INTO matches (match_id, region, tft_patch, data)
+                INSERT INTO match_slim (match_id, region, tft_patch, participants)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (match_id) DO NOTHING
                 """,
-                params,
+                slim_params,
             )
-            return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+            written = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+            cur.executemany(
+                """
+                INSERT INTO processed_matches (match_id, region, tft_patch)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (match_id) DO NOTHING
+                """,
+                ledger_params,
+            )
+            return written
 
     # ── Metadata ───────────────────────────────────────────────────────────────
 

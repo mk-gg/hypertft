@@ -1,6 +1,4 @@
-"""
-collector/main.py
-Orchestrates a full collection run across all configured regions.
+"""Orchestrates a full collection run across all configured regions.
 
 Usage:
     python -m collector.main
@@ -14,18 +12,17 @@ import argparse
 import asyncio
 import logging
 import os
-import sys
 from datetime import datetime, timezone
 
 import aiohttp
 
+from collector.cdragon_client import CDragonClient
 from collector.config import (
     ALL_PLATFORMS,
     PLATFORM_TO_REGIONAL,
     RANKED_QUEUE_ID,
     CollectorConfig,
 )
-from collector.cdragon_client import CDragonClient
 from collector.rate_limiter import RateLimiter
 from collector.riot_client import RiotClient
 from collector.storage import CollectorStorage
@@ -49,8 +46,8 @@ async def collect_platform(
     config: CollectorConfig,
     target_new: int,
 ) -> int:
-    """
-    Run a full seed → expand → download cycle for one platform.
+    """Run a full seed → expand → download cycle for one platform.
+
     Returns the number of new matches written.
     """
     regional = PLATFORM_TO_REGIONAL[platform]
@@ -144,6 +141,13 @@ async def collect_platform(
 # ── Main entry point ───────────────────────────────────────────────────────
 
 async def main(platforms: list[str], limit: int | None) -> None:
+    """Run a full collection cycle across the given platforms.
+
+    Args:
+        platforms: Platform codes to collect from (e.g. ``["na1", "euw1"]``).
+        limit: Max new matches per platform; ``None`` uses the configured
+            ``TARGET_MATCHES_PER_RUN``.
+    """
     config = CollectorConfig()
 
     # Bootstrap the PostgreSQL pool and schema
@@ -218,6 +222,7 @@ async def main(platforms: list[str], limit: int | None) -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="TFT match collector")
     parser.add_argument(
         "--platforms",

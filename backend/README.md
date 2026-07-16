@@ -29,7 +29,20 @@ hypertft-backend/
 │   ├── models.py          ← Pydantic models (request/response + data)
 │   └── patch_map.py       ← internal version → TFT patch translation
 ├── .env.example
+├── pyproject.toml         ← ruff config (lint + docstring convention)
 └── requirements.txt
+```
+
+### Code style
+
+The backend follows the
+[Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
+(Google-style docstrings with `Args:` / `Returns:` / `Raises:` sections),
+enforced with [ruff](https://docs.astral.sh/ruff/) — see `pyproject.toml`:
+
+```bash
+pip install ruff
+ruff check .    # lint (pycodestyle, pyflakes, import order, docstrings)
 ```
 
 ---
@@ -106,11 +119,13 @@ docker run -d --name hypertft-pg \
 The three tables and their indexes are created automatically on first run
 (see `shared/db.py`) — no manual migration step:
 
-| Table | Key | Notes |
-|---|---|---|
-| `matches` | `match_id` | Raw match JSON in a `JSONB` column; btree index on `tft_patch`. |
-| `comp_stats` | `(patch, comp_key)` | Aggregated comps. `units_norm TEXT[]` carries a **GIN index** for array containment/overlap queries. |
-| `meta` | `meta_key` | Key/value `JSONB` (patch roster, run + stats summaries). |
+| Table | Key | Retention | Notes |
+|---|---|---|---|
+| `processed_matches` | `match_id` | forever | Permanent dedup ledger (~60 B/row) + true per-patch match counts. |
+| `match_slim` | `match_id` | last 2 patches | Slim per-match extract (`JSONB`, see `shared/slim.py`); the deep pass prunes older patches. |
+| `comp_stats` | `(patch, comp_key)` | forever | Aggregated comps. `units_norm TEXT[]` carries a **GIN index** for array containment/overlap queries; `exact_sum`/`exact_n` are running totals for the incremental fold. |
+| `meta` | `meta_key` | forever | Key/value `JSONB` (patch roster, watermarks, summaries). |
+| `matches` | `match_id` | legacy | Raw payloads — no longer written; prune once the slim pipeline is verified. |
 
 **GIN array index.** `comp_stats.units_norm` holds each comp's lowercased
 unit list, indexed with `USING GIN`. This powers PostgreSQL array operators
@@ -157,7 +172,7 @@ URL.
 Run from the **project root** (where `collector/` lives):
 
 ```bash
-# All 16 platforms (Plat IV → Challenger across NA, EUW, KR, SEA, …)
+# All configured platforms (na1, euw1, kr, sg2, vn2, oc1)
 python -m collector.main
 
 # Specific regions only
@@ -170,8 +185,10 @@ python -m collector.main --platforms na1 --limit 200
 What this does:
 - Fetches current patch data from Community Dragon → stores in the `meta` table
 - Seeds PUUIDs from Challenger → Grandmaster → Master → Diamond → Emerald → Platinum
-- Expands to match IDs, skips already-stored matches
-- Downloads full match JSONs → stores in the `matches` table with a `tft_patch` field
+- Expands to match IDs, skips already-processed matches (`processed_matches` ledger)
+- Downloads match JSONs, **slims them at ingest** (units, items, placement,
+  traits, augments — see `shared/slim.py`) → stores in `match_slim`; the ~20 KB
+  raw payload is discarded, keeping storage flat as the dataset grows
 - Checkpoints every 25 matches (crash-safe)
 
 Expected output:
@@ -188,36 +205,39 @@ Expected output:
 ### Step 2 — Aggregate stats
 
 ```bash
-python -m aggregator.main          # incremental (default)
-python -m aggregator.main --full   # rebuild every patch
+python -m aggregator.main          # incremental fold (+ deep pass when due)
+python -m aggregator.main --deep   # force a deep pass now
+python -m aggregator.main --full   # deep pass over every windowed patch
 ```
 
-What this does:
-- **Incremental by default** — only re-aggregates patches that received new
-  matches since the last run (tracked by an `agg_watermark` in `meta`). Frozen
-  patches keep their existing `comp_stats` rows untouched. In steady state this
-  means just the current patch, so runs are fast and don't churn the table.
-- Loads only the Ranked matches for each patch being processed
-- Runs Jaccard similarity, comp bucketing, mutation and addition logic per patch
-- Writes stats to the `comp_stats` table, keyed `(patch, comp_key)` (atomic
-  per-patch replace, so dropped comps don't linger)
-- Updates the `meta` table with the patch list and summary counts
+Aggregation runs in **two tiers**, so day-to-day costs stay proportional to
+*new* matches rather than total dataset size:
+
+- **Incremental fold (every run).** Slim matches newer than the `agg_watermark`
+  are folded into each comp's running placement sum/count (`exact_sum`,
+  `exact_n`, `exact_avg`). Reads a few MB, finishes in seconds.
+- **Deep pass (every `DEEP_INTERVAL_DAYS`, default 3).** Recomputes the
+  expensive relational stats — superset averages, mutations, additions, item
+  recommendations — for every patch with new data, from that patch's full slim
+  window (atomic per-patch replace). Also prunes `match_slim` to the last
+  `SLIM_WINDOW_PATCHES` (default 2) patches; pruned patches keep their
+  aggregated `comp_stats` forever.
 
 Use `--full` after changing aggregation parameters (`MIN_N_COMP`, thresholds,
-etc.) so every patch is recomputed with the new settings.
+etc.) so every windowed patch is recomputed with the new settings. Note that
+patches already pruned from the slim window cannot be recomputed — their stats
+are frozen.
 
-Expected output (incremental — only the active patch changed):
+Expected output (incremental day):
 ```
-[INFO] __main__ — Incremental aggregation — 1 patch(es) to process: 17.8
-[INFO] __main__ — Aggregating patch 17.8 — 9200 participants from 1150 matches …
-[INFO] __main__ — Patch 17.8 — 312 comps written.
-[INFO] __main__ — Aggregation complete — 1 patch(es) updated, 510 total comps. Latest: 17.8
+[INFO] __main__ — Incremental fold — 1664 participants from 208 new matches folded into 1121 comps.
+[INFO] __main__ — Aggregation complete — 11240 total comps across 5 patches. Latest: 17.8
 ```
 
-> **Maintenance note.** The per-patch replace writes new row versions each run;
-> Postgres' autovacuum reclaims dead space for reuse but doesn't shrink the
-> file. If `comp_stats` ever bloats well beyond its live size, run a one-time
-> `VACUUM (FULL, ANALYZE) comp_stats` to return the space to disk.
+> **Maintenance note.** The deep pass's per-patch replace writes new row
+> versions each run; Postgres' autovacuum reclaims dead space for reuse but
+> doesn't shrink the file. If `comp_stats` ever bloats well beyond its live
+> size, run a one-time `VACUUM (FULL, ANALYZE) comp_stats`.
 
 ### Step 3 — Run the API
 
