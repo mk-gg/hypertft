@@ -20,15 +20,17 @@ export function avgToTier(avg: number): string {
   return 'D'
 }
 
+// Tier + delta colors are CSS variables (defined per-theme in global.css)
+// so they stay readable in both light and dark mode.
 export function tierColor(tier: string): string {
   const colors: Record<string, string> = {
-    'S': '#f0c040',
-    'A':  '#e89a2a',
-    'B':  '#7ec86e',
-    'C':  '#5b9fd6',
-    'D':  '#98a0b3',
+    'S': 'var(--tier-s)',
+    'A': 'var(--tier-a)',
+    'B': 'var(--tier-b)',
+    'C': 'var(--tier-c)',
+    'D': 'var(--tier-d)',
   }
-  return colors[tier] ?? '#98a0b3'
+  return colors[tier] ?? 'var(--tier-d)'
 }
 
 // Single source of truth for the per-cost unit border color (1→5).
@@ -51,5 +53,9 @@ export function costBorderClass(cost: number): string {
  * gold for a moderate one, gray otherwise.
  */
 export function deltaColor(delta: number): string {
-  return delta < -1.5 ? '#22a55a' : delta < -0.8 ? '#c89b3c' : '#98a0b3'
+  return delta < -1.5
+    ? 'var(--delta-good)'
+    : delta < -0.8
+      ? 'var(--delta-mid)'
+      : 'var(--delta-neutral)'
 }

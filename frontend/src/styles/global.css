@@ -22,6 +22,10 @@
 
   --color-border: var(--border);
   --color-ring: var(--ring);
+
+  /* Brand accent — TFT gold. Used for active toggles, highlight dots. */
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
 }
 
 @font-face {
@@ -51,6 +55,21 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+
+  /* TFT gold accent — darkened for contrast on light backgrounds */
+  --gold: oklch(0.58 0.12 84);
+  --gold-foreground: oklch(0.985 0 0);
+
+  /* Data-encoding colors (avg-placement deltas + tier grades).
+     Fixed semantics, theme-tuned lightness for contrast. */
+  --delta-good:    oklch(0.52 0.15 152);
+  --delta-mid:     oklch(0.55 0.11 84);
+  --delta-neutral: oklch(0.55 0.02 260);
+  --tier-s: oklch(0.62 0.13 84);
+  --tier-a: oklch(0.60 0.14 55);
+  --tier-b: oklch(0.55 0.14 145);
+  --tier-c: oklch(0.55 0.11 250);
+  --tier-d: oklch(0.55 0.02 260);
 }
 
 
@@ -64,6 +83,19 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --ring: oklch(0.556 0 0);
+
+  /* TFT gold accent (≈ #c89b3c) */
+  --gold: oklch(0.72 0.11 84);
+  --gold-foreground: oklch(0.2 0 0);
+
+  --delta-good:    oklch(0.68 0.15 152);  /* ≈ #22a55a */
+  --delta-mid:     oklch(0.72 0.11 84);   /* ≈ #c89b3c */
+  --delta-neutral: oklch(0.72 0.02 260);  /* ≈ #98a0b3 */
+  --tier-s: oklch(0.83 0.13 90);          /* ≈ #f0c040 */
+  --tier-a: oklch(0.73 0.14 65);          /* ≈ #e89a2a */
+  --tier-b: oklch(0.76 0.13 145);         /* ≈ #7ec86e */
+  --tier-c: oklch(0.68 0.10 250);         /* ≈ #5b9fd6 */
+  --tier-d: oklch(0.72 0.02 260);         /* ≈ #98a0b3 */
 }
 
 @layer base {

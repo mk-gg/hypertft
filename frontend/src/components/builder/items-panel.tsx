@@ -92,7 +92,7 @@ export function ItemsPanel() {
     <div className="flex flex-col gap-4 pb-10">
 
       {/* Mode toggle */}
-      <div className="flex items-center gap-1 self-start rounded-lg border border-[#232635]/50 bg-background/20 p-1">
+      <div className="flex items-center gap-1 self-start rounded-lg border border-border bg-background/20 p-1">
         {(['exact', 'super'] as Mode[]).map((m) => (
           <button
             key={m}
@@ -100,8 +100,8 @@ export function ItemsPanel() {
             className={cn(
               'rounded-md px-3 py-1 text-[11px] font-medium transition-all',
               mode === m
-                ? 'bg-[#c89b3c] text-[#1a1a1a]'
-                : 'text-[#676e85] hover:text-[#cdd6e4] hover:bg-[#232635]/30',
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground/80 hover:text-foreground/90 hover:bg-muted/30',
             )}
           >
             {m === 'exact' ? 'Exact' : 'Superset'}
@@ -115,10 +115,10 @@ export function ItemsPanel() {
           const icon = unitIcon(unitStat.unit)
           const cost = unitCost(unitStat.unit)
           return (
-            <div key={unitStat.unit} className="flex flex-col overflow-hidden rounded-lg border border-[#232635]/50 bg-background/20">
+            <div key={unitStat.unit} className="flex flex-col overflow-hidden rounded-lg border border-border bg-background/20">
 
               {/* Unit header */}
-              <div className="flex items-center gap-2 border-b border-[#232635]/40 bg-[#1a1c2b]/40 px-3 py-2">
+              <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
                 {icon ? (
                   <img
                     src={icon}
@@ -128,11 +128,11 @@ export function ItemsPanel() {
                     className={cn('h-6 w-6 rounded border-2', costBorderClass(cost))}
                   />
                 ) : (
-                  <div className={cn('flex h-6 w-6 items-center justify-center rounded border-2 bg-[#1a1c2b] text-[8px]', costBorderClass(cost))}>
+                  <div className={cn('flex h-6 w-6 items-center justify-center rounded border-2 bg-muted text-[8px]', costBorderClass(cost))}>
                     {unitStat.unit.slice(0, 2)}
                   </div>
                 )}
-                <span className="text-xs font-medium text-[#cdd6e4]">{unitStat.unit}</span>
+                <span className="text-xs font-medium text-foreground/90">{unitStat.unit}</span>
               </div>
 
               {/* Item rows */}
@@ -141,7 +141,7 @@ export function ItemsPanel() {
                   const iIcon = itemIcon(item.item)
                   const iName = itemName(item.item)
                   return (
-                    <div key={j} className="flex flex-col items-center flex-shrink-0 w-20 p-1 rounded-md hover:bg-[#1a1c2b]/40 transition-colors">
+                    <div key={j} className="flex flex-col items-center flex-shrink-0 w-20 p-1 rounded-md hover:bg-muted/40 transition-colors">
                       {iIcon ? (
                         <img
                           src={iIcon}
@@ -149,18 +149,18 @@ export function ItemsPanel() {
                           width={32}
                           height={32}
                           title={iName}
-                          className="h-8 w-8 shrink-0 rounded-sm border border-[#232635]/50"
+                          className="h-8 w-8 shrink-0 rounded-sm border border-border"
                         />
                       ) : (
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[#232635]/50 bg-[#1a1c2b] text-[9px] text-[#676e85]">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-muted text-[9px] text-muted-foreground/80">
                           {iName.slice(0, 2)}
                         </div>
                       )}
-                      <span className="mt-1 text-[10px] text-[#98a0b3] text-center truncate w-full">{iName}</span>
+                      <span className="mt-1 text-[10px] text-muted-foreground text-center truncate w-full">{iName}</span>
                       <span className="font-mono text-[11px]" style={{ color: deltaColor(item.delta) }}>
                         {item.delta.toFixed(2)}
                       </span>
-                      <span className="font-mono text-[9px] text-[#676e85]">
+                      <span className="font-mono text-[9px] text-muted-foreground/80">
                         {item.avg.toFixed(2)}
                       </span>
                     </div>

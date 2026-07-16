@@ -62,7 +62,7 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
 
       {(isAll || mode === 'comps') && (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[10px] uppercase tracking-wider text-[#676e85]">Your board</p>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">Your board</p>
           <div className="flex flex-wrap gap-1">
             {units.filter(Boolean).map((name, i) => {
               const u = unitData(name)
@@ -73,7 +73,7 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
                       className={cn('h-8 w-8 rounded border-2', costBorderClass(u.cost))}
                     />
                   ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[8px]">
+                    <div className="flex h-8 w-8 items-center justify-center rounded border border-border bg-muted text-[8px]">
                       {u.name.slice(0, 2)}
                     </div>
                   )}
@@ -81,8 +81,8 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
               )
             })}
           </div>
-          <p className="text-[11px] text-[#676e85]">
-            Superset avg <span className="font-medium text-[#cdd6e4]">{result.superset_avg != null ? result.superset_avg.toFixed(2) : '—'}</span>
+          <p className="text-[11px] text-muted-foreground/80">
+            Superset avg <span className="font-medium text-foreground/90">{result.superset_avg != null ? result.superset_avg.toFixed(2) : '—'}</span>
             <span className="mx-1 opacity-40">·</span>
             {result.superset_n} games
             <span className="mx-1 opacity-40">·</span>
@@ -93,18 +93,18 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
 
       {(isAll || mode === 'comps') && (
         <div className="flex flex-col gap-2">
-          <p className="text-[10px] uppercase tracking-wider text-[#676e85]">Suggested comps</p>
-          <div className="flex max-h-[380px] flex-col overflow-y-auto divide-y divide-[#232635]/40 rounded-lg border border-[#232635]/50 bg-background/20 scrollbar-thin scrollbar-thumb-muted-foreground/10">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">Suggested comps</p>
+          <div className="flex max-h-[380px] flex-col overflow-y-auto divide-y divide-border rounded-lg border border-border bg-background/20 scrollbar-thin scrollbar-thumb-muted-foreground/10">
             {result.suggested_comps.map((comp, i) => {
               const tier = avgToTier(comp.exact_avg)
               return (
-                <div key={i} className="flex flex-col gap-2 px-3 py-2.5 hover:bg-[#1a1c2b]/40 transition-colors">
+                <div key={i} className="flex flex-col gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-black" style={{ color: tierColor(tier) }}>{tier}</span>
-                      <span className="text-[11px] text-[#98a0b3]">avg {comp.exact_avg.toFixed(2)} · {comp.exact_n}n</span>
+                      <span className="text-[11px] text-muted-foreground">avg {comp.exact_avg.toFixed(2)} · {comp.exact_n}n</span>
                     </div>
-                    <span className="text-[10px] text-[#676e85]">{Math.round(comp.similarity * 100)}% match</span>
+                    <span className="text-[10px] text-muted-foreground/80">{Math.round(comp.similarity * 100)}% match</span>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {(() => {
@@ -137,11 +137,11 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
                                 )}
                               />
                             ) : (
-                              <div className={cn('flex h-7 w-7 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[8px]', isMissing && 'opacity-40')}>
+                              <div className={cn('flex h-7 w-7 items-center justify-center rounded border border-border bg-muted text-[8px]', isMissing && 'opacity-40')}>
                                 {u.name.slice(0, 2)}
                               </div>
                             )}
-                            {isMissing && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#c89b3c]" />}
+                            {isMissing && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-gold" />}
                           </div>
                         )
                       })
@@ -156,12 +156,12 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
 
       {(isAll || mode === 'additions') && result.additions.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-[10px] uppercase tracking-wider text-[#676e85]">Add to your board</p>
-          <div className="flex max-h-[240px] flex-col overflow-y-auto divide-y divide-[#232635]/40 rounded-lg border border-[#232635]/50 bg-background/20 scrollbar-thin">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">Add to your board</p>
+          <div className="flex max-h-[240px] flex-col overflow-y-auto divide-y divide-border rounded-lg border border-border bg-background/20 scrollbar-thin">
             {result.additions.map((add, i) => {
               const u = unitData(add.unit)
               return (
-                <div key={i} className="flex items-center gap-3 px-3 py-2 hover:bg-[#1a1c2b]/60 transition-colors cursor-pointer group"
+                <div key={i} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/60 transition-colors cursor-pointer group"
                   onClick={() => addUnitByName(add.unit, unitsMap)}
                 >
                   {u.icon ? (
@@ -169,13 +169,13 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
                       className={cn('h-7 w-7 shrink-0 rounded border-2 group-hover:border-primary/50', costBorderClass(u.cost))}
                     />
                   ) : (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[8px]">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-muted text-[8px]">
                       {u.name.slice(0, 2)}
                     </div>
                   )}
-                  <span className="flex-1 text-xs text-[#cdd6e4] group-hover:text-white">{add.unit}</span>
+                  <span className="flex-1 text-xs text-foreground/90 group-hover:text-foreground">{add.unit}</span>
                   <span className="font-mono text-xs" style={{ color: deltaColor(add.delta) }}>{add.delta.toFixed(2)}</span>
-                  <span className="w-12 text-right font-mono text-[11px] text-[#676e85]">avg {add.avg.toFixed(2)}</span>
+                  <span className="w-12 text-right font-mono text-[11px] text-muted-foreground/80">avg {add.avg.toFixed(2)}</span>
                 </div>
               )
             })}
@@ -185,13 +185,13 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
 
       {(isAll || mode === 'mutations') && result.mutations.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-[10px] uppercase tracking-wider text-[#676e85]">Swap suggestions</p>
-          <div className="flex max-h-[240px] flex-col overflow-y-auto divide-y divide-[#232635]/40 rounded-lg border border-[#232635]/50 bg-background/20 scrollbar-thin">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground/80">Swap suggestions</p>
+          <div className="flex max-h-[240px] flex-col overflow-y-auto divide-y divide-border rounded-lg border border-border bg-background/20 scrollbar-thin">
             {result.mutations.map((mut, i) => {
               const uOut = unitData(mut.unit_out)
               const uIn = unitData(mut.unit_in)
               return (
-                <div key={i} className="flex items-center gap-2 px-3 py-2 hover:bg-[#1a1c2b]/60 transition-colors cursor-pointer group"
+                <div key={i} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/60 transition-colors cursor-pointer group"
                   onClick={() => swapUnitByName(mut.unit_out, mut.unit_in, unitsMap)}
                 >
                   {uOut.icon ? (
@@ -199,11 +199,11 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
                       className={cn('h-6 w-6 shrink-0 rounded border-2 grayscale opacity-50', costBorderClass(uOut.cost))}
                     />
                   ) : (
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[7px] opacity-50">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-muted text-[7px] opacity-50">
                       {uOut.name.slice(0, 2)}
                     </div>
                   )}
-                  <svg className="shrink-0 text-[#676e85]" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <svg className="shrink-0 text-muted-foreground/80" width="12" height="12" viewBox="0 0 12 12" fill="none">
                     <path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                   {uIn.icon ? (
@@ -211,17 +211,17 @@ export function RecommendedPanel({ mode, result, unitsMap, isLoading, className 
                       className={cn('h-6 w-6 shrink-0 rounded border-2 group-hover:border-primary/50', costBorderClass(uIn.cost))}
                     />
                   ) : (
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[#2d3146]/30 bg-[#1a1c2b] text-[7px]">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-muted text-[7px]">
                       {uIn.name.slice(0, 2)}
                     </div>
                   )}
-                  <span className="flex-1 text-[11px] text-[#98a0b3]">
-                    <span className="text-[#676e85] line-through">{mut.unit_out}</span>
+                  <span className="flex-1 text-[11px] text-muted-foreground">
+                    <span className="text-muted-foreground/80 line-through">{mut.unit_out}</span>
                     <span className="mx-1">→</span>
-                    <span className="text-[#cdd6e4]">{mut.unit_in}</span>
+                    <span className="text-foreground/90">{mut.unit_in}</span>
                   </span>
                   <span className="font-mono text-xs" style={{ color: deltaColor(mut.delta) }}>{mut.delta.toFixed(2)}</span>
-                  <span className="w-12 text-right font-mono text-[11px] text-[#676e85]">avg {mut.avg.toFixed(2)}</span>
+                  <span className="w-12 text-right font-mono text-[11px] text-muted-foreground/80">avg {mut.avg.toFixed(2)}</span>
                 </div>
               )
             })}
