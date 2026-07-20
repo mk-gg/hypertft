@@ -7,7 +7,7 @@ export const BOARD_COLS = 7
 export const SITE: Site = {
   title: 'HyperTFT',
   description: 'Find trending TFT comps',
-  href: 'https://hypertft.pages.dev',
+  href: 'https://hypertft.mkgg.dev',
   author: 'mk-gg',
   locale: 'en-US',
 }

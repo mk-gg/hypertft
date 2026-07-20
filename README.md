@@ -4,7 +4,7 @@ Data-driven Teamfight Tactics analytics — patch-by-patch tier lists, a comp
 builder with live suggestions, and item recommendations, computed from ranked
 matches collected across six regions (NA, EUW, KR, SEA).
 
-**Live:** https://hypertft.pages.dev
+**Live:** https://hypertft.mkgg.dev
 
 ## How it works
 
