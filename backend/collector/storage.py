@@ -12,6 +12,7 @@ from shared.patch_map import resolve_tft_patch
 from shared.slim import extract_slim_participants
 
 logger = logging.getLogger(__name__)
+_SEEN_VERSIONS: set[str] = set()
 
 def _resolve_patch(match_data: dict) -> str:
     """Extract the game version from a raw match and map it to a TFT patch.
@@ -25,7 +26,9 @@ def _resolve_patch(match_data: dict) -> str:
     info = match_data.get("info", {})
     game_version = info.get("game_version", "") or match_data.get("game_version", "")
     patch = resolve_tft_patch(game_version)
-
+    if game_version not in _SEEN_VERSIONS:
+        _SEEN_VERSIONS.add(game_version)
+        logger.warning("New distinct game_version seen: %r", game_version)
     if patch == "unknown":
         set_number = info.get("tft_set_number")
         if set_number:
