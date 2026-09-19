@@ -13,14 +13,25 @@ from shared.slim import extract_slim_participants
 
 logger = logging.getLogger(__name__)
 
-
 def _resolve_patch(match_data: dict) -> str:
-    """Extract the game version from a raw match and map it to a TFT patch."""
-    game_version = (
-        match_data.get("info", {}).get("game_version", "")
-        or match_data.get("game_version", "")
-    )
-    return resolve_tft_patch(game_version)
+    """Extract the game version from a raw match and map it to a TFT patch.
+
+    New-engine (Unreal) matches carry a placeholder game_version
+    ('TFT Unreal Version ?.?.?.?') with no real number in it, so fall back
+    to the match's own tft_set_number, which Riot populates natively and
+    reliably regardless of engine. This loses minor-patch granularity for
+    those matches (bucketed as e.g. "18.0") until Riot ships real versioning.
+    """
+    info = match_data.get("info", {})
+    game_version = info.get("game_version", "") or match_data.get("game_version", "")
+    patch = resolve_tft_patch(game_version)
+
+    if patch == "unknown":
+        set_number = info.get("tft_set_number")
+        if set_number:
+            return f"{set_number}.0"
+
+    return patch
 
 
 class CollectorStorage:
