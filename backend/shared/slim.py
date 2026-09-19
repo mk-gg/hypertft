@@ -36,10 +36,19 @@ round-by-round metadata.
 """
 
 from __future__ import annotations
-
-from shared.compute_utils import norm_unit
+import logging
+from shared.compute_utils import norm_unit, unit_set_number
 from shared.constants import is_real_item
 
+logger = logging.getLogger(__name__)
+
+def _participant_set_number(raw_units: list[dict]) -> int | None:
+    counts: dict[int, int] = {}
+    for u in raw_units:
+        n = unit_set_number(u.get("c", ""))
+        if n is not None:
+            counts[n] = counts.get(n, 0) + 1
+    return max(counts, key=counts.get) if counts else None
 
 def extract_slim_participants(match_data: dict) -> list[dict]:
     """Extract the slim participants array from a raw Riot match payload.
@@ -105,11 +114,25 @@ def slim_to_participants(
     Returns:
         One participant dict per board, ready for aggregation.
     """
+    try:
+        expected_set = int(tft_patch.split(".")[0])
+    except (ValueError, IndexError):
+        expected_set = None
+
     out: list[dict] = []
+    dropped = 0
     for p in slim_participants:
+        raw_units = p.get("u", [])
+
+        if expected_set is not None:
+            board_set = _participant_set_number(raw_units)
+            if board_set is not None and board_set != expected_set:
+                dropped += 1
+                continue
+
         units: list[str] = []
         items_by_unit: dict[str, list[str]] = {}
-        for u in p.get("u", []):
+        for u in raw_units:
             name = norm_unit(u.get("c", ""))
             if not name:
                 continue
@@ -127,4 +150,9 @@ def slim_to_participants(
                 "items_by_unit": items_by_unit,
             }
         )
+    # if dropped:
+    #     logger.warning(
+    #         "Dropped %d participant(s) from a different set under patch %s",
+    #         dropped, tft_patch,
+    #     )
     return out
